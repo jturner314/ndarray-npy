@@ -6,3 +6,9 @@ authors = ["Jim Turner <rust@turner.link>"]
 [dependencies]
 byteorder = "1.2"
 ndarray = "0.11"
+zip = { version = "0.3", default-features = false, optional = true }
+
+[features]
+default = ["npz", "compressed_npz"]
+npz = ["zip"]
+compressed_npz = ["zip/deflate"]

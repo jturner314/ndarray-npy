@@ -1,11 +1,12 @@
 # ndarray-npy
 
-This crate provides an extension method for [`ndarray`]'s `ArrayBase` type to
-write an array in [`.npy` format]. See [`src/lib.rs`](src/lib.rs) for more
+This crate provides support for writing [`ndarray`]'s `ArrayBase` type to
+[`.npy`] and [`.npz`] files. See [`src/lib.rs`](src/lib.rs) for more
 information.
 
 [`ndarray`]: https://github.com/bluss/rust-ndarray
-[`.npy` format]: https://docs.scipy.org/doc/numpy/neps/npy-format.html
+[`.npy`]: https://docs.scipy.org/doc/numpy/neps/npy-format.html
+[`.npz`]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.savez.html
 
 ## License
 

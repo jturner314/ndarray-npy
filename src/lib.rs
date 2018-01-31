@@ -1,8 +1,9 @@
 //! This crate provides an extension method for [`ndarray`]'s `ArrayBase` type to
-//! write an array in [`.npy` format].
+//! write [`.npy`] and [`.npz`] files..
 //!
 //! [`ndarray`]: https://github.com/bluss/rust-ndarray
-//! [`.npy` format]: https://docs.scipy.org/doc/numpy/neps/npy-format.html
+//! [`.npy`]: https://docs.scipy.org/doc/numpy/neps/npy-format.html
+//! [`.npz`]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.savez.html
 //!
 //! # Example
 //!
@@ -25,7 +26,13 @@
 
 extern crate byteorder;
 extern crate ndarray;
+#[cfg(feature = "npz")]
+extern crate zip;
 
 mod npy;
+#[cfg(feature = "npz")]
+mod npz;
 
 pub use npy::{Element, NpyExt};
+#[cfg(feature = "npz")]
+pub use npz::{NpzError, NpzWriter};
