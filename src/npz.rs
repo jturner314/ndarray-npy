@@ -83,7 +83,7 @@ impl<W: Write + Seek> NpzWriter<W> {
     }
 
     /// Adds an array with the specified `name` to the `.npz` file.
-    pub fn add_array<N, S, D>(&mut self, name: N, array: ArrayBase<S, D>) -> Result<(), NpzError>
+    pub fn add_array<N, S, D>(&mut self, name: N, array: &ArrayBase<S, D>) -> Result<(), NpzError>
     where
         N: Into<String>,
         S::Elem: Element,
