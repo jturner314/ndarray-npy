@@ -119,10 +119,10 @@ fn format_header<A: Element>(fortran_order: bool, shape: &[usize]) -> Vec<u8> {
         if fortran_order { "True" } else { "False" }
     );
     for (i, axis_len) in shape.iter().enumerate() {
-        if i != 0 {
-            arr_format.push_str(", ");
-        }
         arr_format.push_str(&format!("{}", axis_len));
+        if shape.len() == 1 || shape.len() != 0 && i != shape.len() - 1 {
+            arr_format.push(',');
+        }
     }
     arr_format.push_str("), }");
 
