@@ -110,13 +110,27 @@ impl Version {
     }
 }
 
+enum Layout {
+    ContiguousC,
+    ContiguousF,
+}
+
+impl Layout {
+    fn fortran_order(&self) -> &str {
+        match *self {
+            Layout::ContiguousC => "False",
+            Layout::ContiguousF => "True",
+        }
+    }
+}
+
 /// Formats file header.
-fn format_header<A: Element>(fortran_order: bool, shape: &[usize]) -> Vec<u8> {
+fn format_header<A: Element>(layout: Layout, shape: &[usize]) -> Vec<u8> {
     // Metadata describing array's format as ASCII string.
     let mut arr_format = format!(
         "{{'descr': {}, 'fortran_order': {}, 'shape': (",
         A::type_descriptor(),
-        if fortran_order { "True" } else { "False" }
+        layout.fortran_order(),
     );
     for (i, axis_len) in shape.iter().enumerate() {
         arr_format.push_str(&format!("{}", axis_len));
@@ -171,30 +185,34 @@ pub trait NpyExt {
 
 impl<A, S, D> NpyExt for ArrayBase<S, D>
 where
-    A: Clone + Element,
+    A: Element,
     S: Data<Elem = A>,
     D: Dimension,
 {
     fn write_npy<'a, W: io::Write>(&'a self, mut writer: W) -> io::Result<()> {
-        let mut write_contiguous = |view: ArrayView<A, D>, fortran_order| {
-            let header = format_header::<A>(fortran_order, view.shape());
+        let write_contiguous = |mut writer: W, fortran_order| {
+            let header = format_header::<A>(fortran_order, self.shape());
             writer.write_all(&header)?;
             writer.write_all(unsafe {
                 ::std::slice::from_raw_parts::<'a, u8>(
-                    view.as_ptr() as *const u8,
-                    view.len() * A::SIZE,
+                    self.as_ptr() as *const u8,
+                    self.len() * A::SIZE,
                 )
             })?;
             Ok(())
         };
         if self.is_standard_layout() {
-            write_contiguous(self.view(), false)
+            write_contiguous(writer, Layout::ContiguousC)
         } else if self.view().reversed_axes().is_standard_layout() {
-            write_contiguous(self.view(), true)
+            write_contiguous(writer, Layout::ContiguousF)
         } else {
-            let tmp = self.to_owned();
-            debug_assert!(tmp.is_standard_layout());
-            write_contiguous(tmp.view(), false)
+            writer.write_all(&format_header::<A>(Layout::ContiguousC, self.shape()))?;
+            for elem in self.iter() {
+                writer.write_all(unsafe {
+                    ::std::slice::from_raw_parts::<'a, u8>(elem as *const A as *const u8, A::SIZE)
+                })?;
+            }
+            Ok(())
         }
     }
 }

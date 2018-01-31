@@ -85,7 +85,7 @@ impl<W: Write + Seek> NpzWriter<W> {
     pub fn add_array<N, S, D>(&mut self, name: N, array: ArrayBase<S, D>) -> Result<(), NpzError>
     where
         N: Into<String>,
-        S::Elem: Clone + Element,
+        S::Elem: Element,
         S: Data,
         D: Dimension,
     {
