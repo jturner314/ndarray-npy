@@ -8,6 +8,7 @@ use zip::{CompressionMethod, ZipWriter};
 use zip::result::ZipError;
 use zip::write::FileOptions;
 
+/// An error reading/writing a `.npz` file.
 #[derive(Debug)]
 pub enum NpzError {
     /// An error caused by I/O.
