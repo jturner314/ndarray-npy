@@ -1,5 +1,7 @@
 # ndarray-npy
 
+[![Build Status](https://travis-ci.org/jturner314/ndarray-npy.svg?branch=master)](https://travis-ci.org/jturner314/ndarray-npy)
+
 This crate provides support for reading/writing [`ndarray`]'s `ArrayBase` type
 from/to [`.npy`] and [`.npz`] files. See [`src/lib.rs`](src/lib.rs) for more
 information.
