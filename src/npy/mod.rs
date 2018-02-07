@@ -82,7 +82,7 @@ where
 
 /// An array element type that can be read from an `.npy` or `.npz` file.
 pub trait ReadableElement: Sized {
-    type Error: 'static + Error;
+    type Error: 'static + Error + Send + Sync;
 
     fn from_bytes_owned(type_desc: &PyExpr, bytes: Vec<u8>) -> Result<Vec<Self>, Self::Error>;
 }
@@ -103,7 +103,7 @@ quick_error! {
             cause(err)
             from()
         }
-        ReadableElement(err: Box<Error>) {
+        ReadableElement(err: Box<Error + Send + Sync>) {
             description("ReadableElement error")
             display(x) -> ("{}: {}", x.description(), err)
             cause(&**err)
