@@ -1,7 +1,7 @@
 # ndarray-npy
 
-This crate provides support for writing [`ndarray`]'s `ArrayBase` type to
-[`.npy`] and [`.npz`] files. See [`src/lib.rs`](src/lib.rs) for more
+This crate provides support for reading/writing [`ndarray`]'s `ArrayBase` type
+from/to [`.npy`] and [`.npz`] files. See [`src/lib.rs`](src/lib.rs) for more
 information.
 
 [`ndarray`]: https://github.com/bluss/rust-ndarray

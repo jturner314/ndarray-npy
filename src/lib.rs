@@ -1,31 +1,27 @@
-//! This crate provides an extension method for [`ndarray`]'s `ArrayBase` type to
-//! write [`.npy`] and [`.npz`] files..
+//! This crate provides methods to read/write [`ndarray`]'s `ArrayBase` type
+//! from/to [`.npy`] and [`.npz`] files.
 //!
 //! [`ndarray`]: https://github.com/bluss/rust-ndarray
 //! [`.npy`]: https://docs.scipy.org/doc/numpy/neps/npy-format.html
 //! [`.npz`]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.savez.html
 //!
-//! # Example
+//! See [`ReadNpyExt`] and [`WriteNpyExt`] for reading/writing `.npy` files.
 //!
-//! ```ignore
-//! #[macro_use]
-//! extern crate ndarray;
-//! extern crate ndarray_npy;
+//! [`ReadNpyExt`]: trait.ReadNpyExt.html
+//! [`WriteNpyExt`]: trait.WriteNpyExt.html
 //!
-//! use ndarray_npy::NpyExt;
-//! use std::fs::File;
+//! See [`NpzReader`] and [`NpzWriter`] for reading/writing `.npz` files.
 //!
-//! # fn example() -> std::io::Result<()> {
-//! let arr = array![[1, 2, 3], [4, 5, 6]];
-//! let mut file = File::create("array.npy")?;
-//! arr.write_npy(&mut file)?;
-//! # Ok(())
-//! # }
-//! # fn main () {}
-//! ```
+//! [`NpzReader`]: struct.NpzReader.html
+//! [`NpzWriter`]: struct.NpzWriter.html
 
 extern crate byteorder;
 extern crate ndarray;
+extern crate pest;
+#[macro_use]
+extern crate pest_derive;
+#[macro_use]
+extern crate quick_error;
 #[cfg(feature = "npz")]
 extern crate zip;
 
@@ -33,6 +29,6 @@ mod npy;
 #[cfg(feature = "npz")]
 mod npz;
 
-pub use npy::{Element, NpyExt};
+pub use npy::{ReadNpyError, ReadNpyExt, ReadableElement, WritableElement, WriteNpyExt};
 #[cfg(feature = "npz")]
-pub use npz::{NpzError, NpzWriter};
+pub use npz::{NpzReader, NpzWriter, ReadNpzError, WriteNpzError};

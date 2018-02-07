@@ -1,0 +1,19 @@
+header = { soi ~ "{" ~ (key ~ ":" ~ value ~ ",")* ~ (key ~ ":" ~ value)? ~ "}" ~ "\n" ~ eoi }
+
+key = { string }
+value = { string | bool | shape }
+
+// This isn't quite right but should be close enough.
+string = ${ push("\"" | "'") ~ string_body ~ pop }
+string_body = @{ (!peek ~ any)* }
+
+bool = @{ "True" | "False" }
+
+// Only parse decimal integers, and don't allow `_`.
+usize = @{ nonzerodigit ~ digit* | "0"+ }
+nonzerodigit = @{ '1'..'9' }
+digit = @{ '0'..'9' }
+
+shape = { "(" ~ ((usize ~ ",")+ ~ usize?)? ~ ")" }
+
+whitespace = _{ " " | "\t" | "\x0C" }
