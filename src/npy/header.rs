@@ -2,7 +2,7 @@ use byteorder::{ByteOrder, LittleEndian};
 use pest::Parser;
 use pest::iterators::Pair;
 use std::error::Error;
-use std::fmt;
+use std::fmt::{self, Write};
 use std::io;
 use std::num::ParseIntError;
 use super::ReadNpyError;
@@ -54,6 +54,10 @@ quick_error! {
         IllegalValue(key: String, value: String) {
             description("illegal value for key")
             display(x) -> ("{} {}: {}", x.description(), key, value)
+        }
+        Custom(msg: String) {
+            description("custom error")
+            display(x) -> ("{}: {}", x.description(), msg)
         }
     }
 }
@@ -211,10 +215,60 @@ macro_rules! parse_pairs_as {
     };
 }
 
-fn parse_string(string: Pair<Rule>) -> &str {
+fn parse_string_escape_seq(escape_seq: Pair<Rule>) -> Result<char, HeaderParseError> {
+    debug_assert_eq!(escape_seq.as_rule(), Rule::string_escape_seq);
+    let (seq,) = parse_pairs_as!(escape_seq.into_inner(), (_,));
+    match seq.as_rule() {
+        Rule::char_escape => Ok(match seq.as_str() {
+            "\\" => '\\',
+            "'" => '\'',
+            "\"" => '"',
+            "a" => '\x07',
+            "b" => '\x08',
+            "f" => '\x0C',
+            "n" => '\n',
+            "r" => '\r',
+            "t" => '\t',
+            "v" => '\x0B',
+            _ => unreachable!(),
+        }),
+        Rule::octal_escape => ::std::char::from_u32(u32::from_str_radix(seq.as_str(), 8).unwrap())
+            .ok_or_else(|| {
+                HeaderParseError::Custom(format!("Octal escape is invalid: {}", seq.as_str()))
+            }),
+        Rule::hex_escape => {
+            ::std::char::from_u32(u32::from_str_radix(&seq.as_str()[1..], 16).unwrap()).ok_or_else(
+                || HeaderParseError::Custom(format!("Hex escape is invalid: {}", seq.as_str())),
+            )
+        }
+        Rule::name_escape => Err(HeaderParseError::Custom(
+            "Unicode name escapes are not supported.".into(),
+        )),
+        Rule::any_escape => Ok(seq.as_str().chars().next().unwrap()),
+        _ => unreachable!(),
+    }
+}
+
+fn parse_string(string: Pair<Rule>) -> Result<String, HeaderParseError> {
     debug_assert_eq!(string.as_rule(), Rule::string);
-    let (string_body,) = parse_pairs_as!(string.into_inner(), (Rule::string_body,));
-    string_body.as_str()
+    let (string_body,) = parse_pairs_as!(string.into_inner(), (_,));
+    match string_body.as_rule() {
+        Rule::short_string_body | Rule::long_string_body => {
+            let mut out = String::new();
+            for item in string_body.into_inner() {
+                match item.as_rule() {
+                    Rule::short_string_non_escape | Rule::long_string_non_escape => {
+                        out.push_str(item.as_str())
+                    }
+                    Rule::line_continuation_seq => (),
+                    Rule::string_escape_seq => out.push(parse_string_escape_seq(item)?),
+                    _ => unreachable!(),
+                }
+            }
+            Ok(out)
+        }
+        _ => unreachable!(),
+    }
 }
 
 fn parse_bool(b: Pair<Rule>) -> bool {
@@ -266,11 +320,24 @@ impl fmt::Display for PyExpr {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
             PyExpr::String(ref s) => {
-                if s.contains("'") {
-                    unimplemented!()
-                } else {
-                    write!(f, "'{}'", s)
+                f.write_char('\'')?;
+                for c in s.chars() {
+                    match c {
+                        '\\' => f.write_str(r"\\")?,
+                        '\r' => f.write_str(r"\r")?,
+                        '\n' => f.write_str(r"\n")?,
+                        '\'' => f.write_str(r"\'")?,
+                        c if c.is_ascii() => f.write_char(c)?,
+                        c => match c as u32 {
+                            n @ 0...0xff => write!(f, r"\x{:0>2x}", n)?,
+                            n @ 0...0xffff => write!(f, r"\u{:0>4x}", n)?,
+                            n @ 0...0xffffffff => write!(f, r"\U{:0>8x}", n)?,
+                            _ => unreachable!(),
+                        }
+                    }
                 }
+                f.write_char('\'')?;
+                Ok(())
             }
         }
     }
@@ -278,14 +345,14 @@ impl fmt::Display for PyExpr {
 
 fn parse_py_expr(expr: Pair<Rule>) -> Result<PyExpr, HeaderParseError> {
     match expr.as_rule() {
-        Rule::string => Ok(PyExpr::String(parse_string(expr).to_owned())),
+        Rule::string => Ok(PyExpr::String(parse_string(expr)?)),
         _ => unimplemented!(),
     }
 }
 
 fn parse_header(h: Pair<Rule>) -> Result<Header, HeaderParseError> {
     debug_assert_eq!(h.as_rule(), Rule::header);
-    let mut key: Option<&str> = None;
+    let mut key: Option<String> = None;
     let mut type_descriptor: Option<PyExpr> = None;
     let mut fortran_order: Option<bool> = None;
     let mut shape: Option<Vec<usize>> = None;
@@ -293,14 +360,14 @@ fn parse_header(h: Pair<Rule>) -> Result<Header, HeaderParseError> {
         match pair.as_rule() {
             Rule::key => {
                 let (k,) = parse_pairs_as!(pair.into_inner(), (Rule::string,));
-                key = Some(parse_string(k))
+                key = Some(parse_string(k)?)
             }
-            Rule::value => match key {
-                Some("descr") => {
+            Rule::value => match key.as_ref() {
+                Some(k) if k == "descr" => {
                     let (value,) = parse_pairs_as!(pair.into_inner(), (_,));
                     type_descriptor = Some(parse_py_expr(value)?);
                 }
-                Some("fortran_order") => {
+                Some(k) if k == "fortran_order" => {
                     let (value,) = parse_pairs_as!(pair.into_inner(), (_,));
                     if let Rule::bool = value.as_rule() {
                         fortran_order = Some(parse_bool(value));
@@ -311,7 +378,7 @@ fn parse_header(h: Pair<Rule>) -> Result<Header, HeaderParseError> {
                         ));
                     }
                 }
-                Some("shape") => {
+                Some(k) if k == "shape" => {
                     let (value,) = parse_pairs_as!(pair.into_inner(), (_,));
                     if let Rule::shape = value.as_rule() {
                         shape = Some(parse_shape(value)?);
@@ -497,5 +564,27 @@ impl Header {
         debug_assert_eq!(out.len() % 16, 0);
 
         out
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn parse_string_example() {
+        let input = r"'hello\th\03o\x1bw\
+are\a\'y\u1234o\U00031234u'";
+        let mut parsed = HeaderParser::parse(Rule::string, input)
+            .unwrap_or_else(|err| panic!("failed to parse as {:?}: {}", Rule::string, err));
+        let s = parse_string(parse_pairs_as!(parsed, (Rule::string,)).0).unwrap();
+        assert_eq!(s, "hello\th\x03o\x1bware\x07'y\u{1234}o\u{31234}u");
+    }
+
+    #[test]
+    fn format_string_example() {
+        let expr = PyExpr::String("hello\th\x03\u{ff}o\x1bware\x07'y\u{1234}o\u{31234}u".into());
+        let formatted = format!("{}", expr);
+        assert_eq!(formatted, "'hello\th\x03\\xffo\x1bware\x07\\'y\\u1234o\\U00031234u'")
     }
 }
