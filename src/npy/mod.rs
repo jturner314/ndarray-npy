@@ -332,7 +332,7 @@ impl ReadableElement for i8 {
         len: usize,
     ) -> Result<Vec<Self>, Self::Error> {
         match *type_desc {
-            PyExpr::String(ref s) if s == "|i1" => {
+            PyExpr::String(ref s) if s == "|i1" || s == "i1" || s == "b" => {
                 // Function to ensure lifetime of bytes slice is correct.
                 fn cast_slice(slice: &mut [i8]) -> &mut [u8] {
                     unsafe {
@@ -357,7 +357,7 @@ impl ReadableElement for u8 {
         len: usize,
     ) -> Result<Vec<Self>, Self::Error> {
         match *type_desc {
-            PyExpr::String(ref s) if s == "|u1" => {
+            PyExpr::String(ref s) if s == "|u1" || s == "u1" || s == "B" => {
                 let mut out = vec![0; len];
                 reader.read_exact(&mut out)?;
                 Ok(out)
