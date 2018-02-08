@@ -1,10 +1,11 @@
 pub mod header;
 
-use byteorder::{BigEndian, ByteOrder, LittleEndian};
+use byteorder::{self, ByteOrder};
 use ndarray::{Data, DataOwned, ShapeError};
 use ndarray::prelude::*;
 use std::error::Error;
 use std::io;
+use std::mem;
 use self::header::{Header, HeaderParseError, PyExpr};
 
 /// An array element type that can be written to an `.npy` or `.npz` file.
@@ -84,7 +85,12 @@ where
 pub trait ReadableElement: Sized {
     type Error: 'static + Error + Send + Sync;
 
-    fn from_bytes_owned(type_desc: &PyExpr, bytes: Vec<u8>) -> Result<Vec<Self>, Self::Error>;
+    /// Checks `type_desc` and reads a `Vec` of length `len` from `reader`.
+    fn read_vec<R: io::Read>(
+        reader: R,
+        type_desc: &PyExpr,
+        len: usize,
+    ) -> Result<Vec<Self>, Self::Error>;
 }
 
 quick_error! {
@@ -108,6 +114,14 @@ quick_error! {
             display(x) -> ("{}: {}", x.description(), err)
             cause(&**err)
             from(ReadPrimitiveError)
+        }
+        LengthOverflow {
+            description("overflow computing length from shape")
+            display(x) -> ("{}", x.description())
+        }
+        ExtraBytes {
+            description("file had extra bytes before EOF")
+            display(x) -> ("{}", x.description())
         }
         Shape(err: ShapeError) {
             description("data did not match shape in header")
@@ -154,16 +168,22 @@ where
 {
     fn read_npy<R: io::Read>(mut reader: R) -> Result<Self, ReadNpyError> {
         let header = Header::from_reader(&mut reader)?;
-        let mut buf =
-            Vec::with_capacity(header.shape.iter().product::<usize>() * ::std::mem::size_of::<A>());
-        reader.read_to_end(&mut buf)?;
-        let data = A::from_bytes_owned(&header.type_descriptor, buf)
-            .map_err(|err| ReadNpyError::ReadableElement(Box::new(err)))?;
         let shape = if header.fortran_order {
             header.shape.f()
         } else {
             header.shape.into_shape()
         };
+        // let len = shape.size_checked().ok_or(ReadNpyError::LengthOverFlow)?;
+        let len = shape.size();
+        let data = A::read_vec(&mut reader, &header.type_descriptor, len)
+            .map_err(|err| ReadNpyError::ReadableElement(Box::new(err)))?;
+        {
+            let mut buf = [0];
+            match reader.read_exact(&mut buf) {
+                Err(ref err) if err.kind() == io::ErrorKind::UnexpectedEof => (),
+                _ => return Err(ReadNpyError::ExtraBytes),
+            }
+        }
         Ok(ArrayBase::from_shape_vec(shape, data)?.into_dimensionality()?)
     }
 }
@@ -185,7 +205,7 @@ macro_rules! impl_writable_primitive {
                 unsafe {
                     ::std::slice::from_raw_parts(
                         self as *const Self as *const u8,
-                        ::std::mem::size_of::<Self>(),
+                        mem::size_of::<Self>(),
                     )
                 }
             }
@@ -194,7 +214,7 @@ macro_rules! impl_writable_primitive {
                 unsafe {
                     ::std::slice::from_raw_parts(
                         slice.as_ptr() as *const u8,
-                        slice.len() * ::std::mem::size_of::<Self>(),
+                        slice.len() * mem::size_of::<Self>(),
                     )
                 }
             }
@@ -209,31 +229,43 @@ quick_error! {
             description("bad descriptor for this type")
             display(x) -> ("{}: {}", x.description(), desc)
         }
+        Io(err: io::Error) {
+            description("I/O error")
+            display(x) -> ("{}: {}", x.description(), err)
+            cause(err)
+            from()
+        }
     }
 }
 
-macro_rules! impl_primitive_multibyte {
-    ($elem:ty, $little_desc:expr, $big_desc:expr, $zero:expr, $read_into:ident) => {
-        impl_writable_primitive!($elem, $little_desc, $big_desc);
-
+macro_rules! impl_readable_primitive {
+    ($elem:ty, $zero:expr, $native_desc:expr, $other_desc:expr, $other_read_into:path) => {
         impl ReadableElement for $elem {
             type Error = ReadPrimitiveError;
 
-            /// Unlike with `i8` and `u8`, this implementation cannot cast the
-            /// data in-place because `u8` might not have the same alignment as
-            /// `Self`.
-            fn from_bytes_owned(type_desc: &PyExpr, bytes: Vec<u8>)
-                                -> Result<Vec<Self>, Self::Error>
+            fn read_vec<R: io::Read>(mut reader: R, type_desc: &PyExpr, len: usize)
+                                     -> Result<Vec<Self>, Self::Error>
             {
                 match *type_desc {
-                    PyExpr::String(ref s) if s == $little_desc => {
-                        let mut out = vec![$zero; bytes.len() / ::std::mem::size_of::<Self>()];
-                        LittleEndian::$read_into(&bytes, &mut out);
+                    PyExpr::String(ref s) if s == $native_desc => {
+                        // Function to ensure lifetime of bytes slice is correct.
+                        fn cast_slice(slice: &mut [$elem]) -> &mut [u8] {
+                            unsafe {
+                                ::std::slice::from_raw_parts_mut(
+                                    slice.as_mut_ptr() as *mut u8,
+                                    slice.len() * mem::size_of::<$elem>(),
+                                )
+                            }
+                        }
+                        let mut out = vec![$zero; len];
+                        reader.read_exact(cast_slice(&mut out))?;
                         Ok(out)
                     }
-                    PyExpr::String(ref s) if s == $big_desc => {
-                        let mut out = vec![$zero; bytes.len() / ::std::mem::size_of::<Self>()];
-                        BigEndian::$read_into(&bytes, &mut out);
+                    PyExpr::String(ref s) if s == $other_desc => {
+                        let mut bytes = vec![0; len * mem::size_of::<$elem>()];
+                        reader.read_exact(&mut bytes)?;
+                        let mut out = vec![$zero; len];
+                        $other_read_into(&bytes, &mut out);
                         Ok(out)
                     }
                     ref other => Err(ReadPrimitiveError::BadDescriptor(other.clone())),
@@ -243,17 +275,39 @@ macro_rules! impl_primitive_multibyte {
     };
 }
 
+macro_rules! impl_primitive_multibyte {
+    ($elem:ty, $little_desc:expr, $big_desc:expr, $zero:expr, $read_into:ident) => {
+        impl_writable_primitive!($elem, $little_desc, $big_desc);
+        #[cfg(target_endian = "little")]
+        impl_readable_primitive!(
+            $elem, $zero, $little_desc, $big_desc, byteorder::BigEndian::$read_into
+        );
+        #[cfg(target_endian = "big")]
+        impl_readable_primitive!(
+            $elem, $zero, $big_desc, $little_desc, byteorder::LittleEndian::$read_into
+        );
+    };
+}
+
 impl ReadableElement for i8 {
     type Error = ReadPrimitiveError;
 
-    fn from_bytes_owned(type_desc: &PyExpr, mut bytes: Vec<u8>) -> Result<Vec<Self>, Self::Error> {
+    fn read_vec<R: io::Read>(
+        mut reader: R,
+        type_desc: &PyExpr,
+        len: usize,
+    ) -> Result<Vec<Self>, Self::Error> {
         match *type_desc {
             PyExpr::String(ref s) if s == "|i1" => {
-                let ptr = bytes.as_mut_ptr() as *mut Self;
-                let len = bytes.len();
-                let capacity = bytes.capacity();
-                ::std::mem::forget(bytes);
-                Ok(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
+                // Function to ensure lifetime of bytes slice is correct.
+                fn cast_slice(slice: &mut [i8]) -> &mut [u8] {
+                    unsafe {
+                        ::std::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, slice.len())
+                    }
+                }
+                let mut out = vec![0; len];
+                reader.read_exact(cast_slice(&mut out))?;
+                Ok(out)
             }
             ref other => Err(ReadPrimitiveError::BadDescriptor(other.clone())),
         }
@@ -263,9 +317,17 @@ impl ReadableElement for i8 {
 impl ReadableElement for u8 {
     type Error = ReadPrimitiveError;
 
-    fn from_bytes_owned(type_desc: &PyExpr, bytes: Vec<u8>) -> Result<Vec<Self>, Self::Error> {
+    fn read_vec<R: io::Read>(
+        mut reader: R,
+        type_desc: &PyExpr,
+        len: usize,
+    ) -> Result<Vec<Self>, Self::Error> {
         match *type_desc {
-            PyExpr::String(ref s) if s == "|u1" => Ok(bytes),
+            PyExpr::String(ref s) if s == "|u1" => {
+                let mut out = vec![0; len];
+                reader.read_exact(&mut out)?;
+                Ok(out)
+            }
             ref other => Err(ReadPrimitiveError::BadDescriptor(other.clone())),
         }
     }
