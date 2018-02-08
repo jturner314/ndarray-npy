@@ -10,13 +10,34 @@ use self::header::{Header, HeaderParseError, PyExpr};
 
 /// An array element type that can be written to an `.npy` or `.npz` file.
 pub unsafe trait WritableElement: Sized {
-    /// A descriptor of the type that can be used in the header.
-    /// This must match the representation of the type in memory.
+    type Error: 'static + Error + Send + Sync;
+
+    /// Returns a descriptor of the type that can be used in the header.
     fn type_descriptor() -> PyExpr;
 
-    fn as_bytes(&self) -> &[u8];
+    /// Writes a single instance of `Self` to the writer.
+    fn write<W: io::Write>(&self, writer: W) -> Result<(), Self::Error>;
 
-    fn slice_as_bytes(slice: &[Self]) -> &[u8];
+    /// Writes a slice of `Self` to the writer.
+    fn write_slice<W: io::Write>(slice: &[Self], writer: W) -> Result<(), Self::Error>;
+}
+
+quick_error! {
+    /// An error writing a `.npy` file.
+    #[derive(Debug)]
+    pub enum WriteNpyError {
+        Io(err: io::Error) {
+            description("I/O error")
+            display(x) -> ("{}: {}", x.description(), err)
+            cause(err)
+            from()
+        }
+        WritableElement(err: Box<Error + Send + Sync>) {
+            description("WritableElement error")
+            display(x) -> ("{}: {}", x.description(), err)
+            cause(&**err)
+        }
+    }
 }
 
 /// Extension trait for writing `ArrayBase` to `.npy` files.
@@ -31,8 +52,9 @@ pub unsafe trait WritableElement: Sized {
 /// use ndarray::prelude::*;
 /// use ndarray_npy::WriteNpyExt;
 /// use std::fs::File;
+/// # use ndarray_npy::WriteNpyError;
 ///
-/// # fn write_example() -> std::io::Result<()> {
+/// # fn write_example() -> Result<(), WriteNpyError> {
 /// let arr: Array2<i32> = array![[1, 2, 3], [4, 5, 6]];
 /// let writer = File::create("array.npy")?;
 /// arr.write_npy(writer)?;
@@ -43,7 +65,7 @@ pub unsafe trait WritableElement: Sized {
 pub trait WriteNpyExt {
     /// Writes the array to `writer` in [`.npy`
     /// format](https://docs.scipy.org/doc/numpy/neps/npy-format.html).
-    fn write_npy<W: io::Write>(&self, writer: W) -> io::Result<()>;
+    fn write_npy<W: io::Write>(&self, writer: W) -> Result<(), WriteNpyError>;
 }
 
 impl<A, S, D> WriteNpyExt for ArrayBase<S, D>
@@ -52,7 +74,7 @@ where
     S: Data<Elem = A>,
     D: Dimension,
 {
-    fn write_npy<'a, W: io::Write>(&'a self, mut writer: W) -> io::Result<()> {
+    fn write_npy<W: io::Write>(&self, mut writer: W) -> Result<(), WriteNpyError> {
         let write_contiguous = |mut writer: W, fortran_order: bool| {
             let header = Header {
                 type_descriptor: A::type_descriptor(),
@@ -60,7 +82,8 @@ where
                 shape: self.shape().to_owned(),
             }.to_bytes();
             writer.write_all(&header)?;
-            writer.write_all(A::slice_as_bytes(self.as_slice_memory_order().unwrap()))?;
+            A::write_slice(self.as_slice_memory_order().unwrap(), &mut writer)
+                .map_err(|err| WriteNpyError::WritableElement(Box::new(err)))?;
             Ok(())
         };
         if self.is_standard_layout() {
@@ -74,7 +97,8 @@ where
                 shape: self.shape().to_owned(),
             }.to_bytes())?;
             for elem in self.iter() {
-                writer.write_all(A::as_bytes(elem))?;
+                elem.write(&mut writer)
+                    .map_err(|err| WriteNpyError::WritableElement(Box::new(err)))?;
             }
             Ok(())
         }
@@ -191,6 +215,8 @@ where
 macro_rules! impl_writable_primitive {
     ($elem:ty, $little_desc:expr, $big_desc:expr) => {
         unsafe impl WritableElement for $elem {
+            type Error = io::Error;
+
             fn type_descriptor() -> PyExpr {
                 if cfg!(target_endian = "little") {
                     $little_desc.into()
@@ -201,22 +227,30 @@ macro_rules! impl_writable_primitive {
                 }
             }
 
-            fn as_bytes(&self) -> &[u8] {
-                unsafe {
-                    ::std::slice::from_raw_parts(
-                        self as *const Self as *const u8,
-                        mem::size_of::<Self>(),
-                    )
+            fn write<W: io::Write>(&self, mut writer: W) -> Result<(), Self::Error> {
+                // Function to ensure lifetime of bytes slice is correct.
+                fn cast(self_: &$elem) -> &[u8] {
+                    unsafe {
+                        ::std::slice::from_raw_parts(
+                            self_ as *const $elem as *const u8,
+                            mem::size_of::<$elem>(),
+                        )
+                    }
                 }
+                writer.write_all(cast(self))
             }
 
-            fn slice_as_bytes(slice: &[Self]) -> &[u8] {
-                unsafe {
-                    ::std::slice::from_raw_parts(
-                        slice.as_ptr() as *const u8,
-                        slice.len() * mem::size_of::<Self>(),
-                    )
+            fn write_slice<W: io::Write>(slice: &[Self], mut writer: W) -> Result<(), Self::Error> {
+                // Function to ensure lifetime of bytes slice is correct.
+                fn cast(slice: &[$elem]) -> &[u8] {
+                    unsafe {
+                        ::std::slice::from_raw_parts(
+                            slice.as_ptr() as *const u8,
+                            slice.len() * mem::size_of::<$elem>(),
+                        )
+                    }
                 }
+                writer.write_all(cast(slice))
             }
         }
     };

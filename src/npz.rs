@@ -1,4 +1,4 @@
-use {ReadNpyError, ReadNpyExt, ReadableElement, WritableElement, WriteNpyExt};
+use {ReadNpyError, ReadNpyExt, ReadableElement, WritableElement, WriteNpyError, WriteNpyExt};
 use ndarray::{Data, DataOwned};
 use ndarray::prelude::*;
 use std::error::Error;
@@ -21,6 +21,13 @@ quick_error! {
         /// An error caused by the zip file.
         Zip(err: ZipError) {
             description("zip file error")
+            display(x) -> ("{}: {}", x.description(), err)
+            cause(err)
+            from()
+        }
+        /// An error caused by writing an inner `.npy` file.
+        Npy(err: WriteNpyError) {
+            description("error writing npy file to npz archive")
             display(x) -> ("{}: {}", x.description(), err)
             cause(err)
             from()
