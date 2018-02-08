@@ -26,12 +26,14 @@ quick_error! {
     /// An error writing a `.npy` file.
     #[derive(Debug)]
     pub enum WriteNpyError {
+        /// An error caused by I/O.
         Io(err: io::Error) {
             description("I/O error")
             display(x) -> ("{}: {}", x.description(), err)
             cause(err)
             from()
         }
+        /// An error issued by the element type when writing the data.
         WritableElement(err: Box<Error + Send + Sync>) {
             description("WritableElement error")
             display(x) -> ("{}: {}", x.description(), err)
@@ -121,32 +123,40 @@ quick_error! {
     /// An error reading a `.npy` file.
     #[derive(Debug)]
     pub enum ReadNpyError {
+        /// An error caused by I/O.
         Io(err: io::Error) {
             description("I/O error")
             display(x) -> ("{}: {}", x.description(), err)
             cause(err)
             from()
         }
+        /// An error caused by parsing the file header.
         HeaderParse(err: HeaderParseError) {
             description("error parsing header")
             display(x) -> ("{}: {}", x.description(), err)
             cause(err)
             from()
         }
+        /// An error issued by the element type when reading the data.
         ReadableElement(err: Box<Error + Send + Sync>) {
             description("ReadableElement error")
             display(x) -> ("{}: {}", x.description(), err)
             cause(&**err)
             from(ReadPrimitiveError)
         }
+        /// Overflow while computing the length of the array from the shape
+        /// described in the file header.
         LengthOverflow {
             description("overflow computing length from shape")
             display(x) -> ("{}", x.description())
         }
+        /// Extra bytes are present between the end of the data and the end of
+        /// the file.
         ExtraBytes {
             description("file had extra bytes before EOF")
             display(x) -> ("{}", x.description())
         }
+        /// An error caused by incorrect array length or dimensionality.
         Shape(err: ShapeError) {
             description("data did not match shape in header")
             display(x) -> ("{}: {}", x.description(), err)
