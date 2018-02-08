@@ -14,6 +14,20 @@
 //!
 //! [`NpzReader`]: struct.NpzReader.html
 //! [`NpzWriter`]: struct.NpzWriter.html
+//!
+//! # Limitations
+//!
+//! * Parsing of `.npy` files is currently limited to files where the `descr`
+//!   field of the [header dictionary] is a Python string literal of the form
+//!   `'string'`, `"string"`, `'''string'''`, or `"""string"""`.
+//!
+//! * `WritableElement` and `ReadableElement` are currently implemented only
+//!   for fixed-size integers and floating point numbers.
+//!
+//! The plan is to add support for more element types (including custom
+//! user-defined structs) in the future.
+//!
+//! [header dictionary]: https://docs.scipy.org/doc/numpy-dev/neps/npy-format.html#format-specification-version-1-0
 
 extern crate byteorder;
 extern crate ndarray;
