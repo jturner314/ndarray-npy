@@ -21,14 +21,20 @@ pub fn parse_string_escape_seq(escape_seq: Pair<Rule>) -> Result<char, HeaderPar
         }),
         Rule::octal_escape => ::std::char::from_u32(u32::from_str_radix(seq.as_str(), 8).unwrap())
             .ok_or_else(|| {
-                HeaderParseError::Custom(format!("Octal escape is invalid: {}", seq.as_str()))
+                HeaderParseError::IllegalEscapeSequence(format!(
+                    "Octal escape is invalid: \\{}",
+                    seq.as_str()
+                ))
             }),
-        Rule::hex_escape => {
-            ::std::char::from_u32(u32::from_str_radix(&seq.as_str()[1..], 16).unwrap()).ok_or_else(
-                || HeaderParseError::Custom(format!("Hex escape is invalid: {}", seq.as_str())),
-            )
-        }
-        Rule::name_escape => Err(HeaderParseError::Custom(
+        Rule::hex_escape | Rule::unicode_hex_escape => ::std::char::from_u32(
+            u32::from_str_radix(&seq.as_str()[1..], 16).unwrap(),
+        ).ok_or_else(|| {
+            HeaderParseError::IllegalEscapeSequence(format!(
+                "Hex escape is invalid: \\x{}",
+                seq.as_str()
+            ))
+        }),
+        Rule::name_escape => Err(HeaderParseError::IllegalEscapeSequence(
             "Unicode name escapes are not supported.".into(),
         )),
         _ => unreachable!(),
@@ -48,6 +54,57 @@ pub fn parse_string(string: Pair<Rule>) -> Result<String, HeaderParseError> {
                     | Rule::string_unknown_escape => out.push_str(item.as_str()),
                     Rule::line_continuation_seq => (),
                     Rule::string_escape_seq => out.push(parse_string_escape_seq(item)?),
+                    _ => unreachable!(),
+                }
+            }
+            Ok(out)
+        }
+        _ => unreachable!(),
+    }
+}
+
+pub fn parse_bytes_escape_seq(escape_seq: Pair<Rule>) -> Result<u8, HeaderParseError> {
+    debug_assert_eq!(escape_seq.as_rule(), Rule::bytes_escape_seq);
+    let (seq,) = parse_pairs_as!(escape_seq.into_inner(), (_,));
+    match seq.as_rule() {
+        Rule::char_escape => Ok(match seq.as_str() {
+            "\\" => b'\\',
+            "'" => b'\'',
+            "\"" => b'"',
+            "a" => b'\x07',
+            "b" => b'\x08',
+            "f" => b'\x0C',
+            "n" => b'\n',
+            "r" => b'\r',
+            "t" => b'\t',
+            "v" => b'\x0B',
+            _ => unreachable!(),
+        }),
+        Rule::octal_escape => u8::from_str_radix(seq.as_str(), 8).map_err(|err| {
+            HeaderParseError::IllegalEscapeSequence(format!(
+                "failed to parse \\{} as u8: {}",
+                seq.as_str(),
+                err,
+            ))
+        }),
+        Rule::hex_escape => Ok(u8::from_str_radix(&seq.as_str()[1..], 16).unwrap()),
+        _ => unreachable!(),
+    }
+}
+
+pub fn parse_bytes(bytes: Pair<Rule>) -> Result<Vec<u8>, HeaderParseError> {
+    debug_assert_eq!(bytes.as_rule(), Rule::bytes);
+    let (bytes_body,) = parse_pairs_as!(bytes.into_inner(), (_,));
+    match bytes_body.as_rule() {
+        Rule::short_bytes_body | Rule::long_bytes_body => {
+            let mut out = Vec::new();
+            for item in bytes_body.into_inner() {
+                match item.as_rule() {
+                    Rule::short_bytes_non_escape
+                    | Rule::long_bytes_non_escape
+                    | Rule::bytes_unknown_escape => out.extend_from_slice(item.as_str().as_bytes()),
+                    Rule::line_continuation_seq => (),
+                    Rule::bytes_escape_seq => out.push(parse_bytes_escape_seq(item)?),
                     _ => unreachable!(),
                 }
             }
@@ -194,6 +251,7 @@ pub fn parse_expr(expr: Pair<Rule>) -> Result<PyExpr, HeaderParseError> {
     let (inner,) = parse_pairs_as!(expr.into_inner(), (_,));
     match inner.as_rule() {
         Rule::string => Ok(PyExpr::String(parse_string(inner)?)),
+        Rule::bytes => Ok(PyExpr::Bytes(parse_bytes(inner)?)),
         Rule::number_expr => Ok(parse_number_expr(inner)),
         Rule::tuple => Ok(PyExpr::Tuple(parse_seq(inner)?)),
         Rule::list => Ok(PyExpr::List(parse_seq(inner)?)),
@@ -427,6 +485,23 @@ are\a\'y\u1234o\U00031234u'",
                 .unwrap_or_else(|err| panic!("failed to parse: {}", err));
             let s = parse_string(parse_pairs_as!(parsed, (Rule::string,)).0).unwrap();
             assert_eq!(s, correct);
+        }
+    }
+
+    #[test]
+    fn parse_bytes_example() {
+        for &(input, correct) in &[
+            ("b''", &b""[..]),
+            (
+                r"b'he\qllo\th\03o\x1bw\
+are\a\'y\u1234o\U00031234u'",
+                &b"he\\qllo\th\x03o\x1bware\x07'y\\u1234o\\U00031234u"[..],
+            ),
+        ] {
+            let mut parsed = HeaderParser::parse(Rule::bytes, input)
+                .unwrap_or_else(|err| panic!("failed to parse: {}", err));
+            let bytes = parse_bytes(parse_pairs_as!(parsed, (Rule::bytes,)).0).unwrap();
+            assert_eq!(bytes, correct);
         }
     }
 

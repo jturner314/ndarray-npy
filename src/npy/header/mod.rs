@@ -61,8 +61,8 @@ quick_error! {
             description("illegal value for key")
             display(x) -> ("{} {}: {}", x.description(), key, value)
         }
-        Custom(msg: String) {
-            description("custom error")
+        IllegalEscapeSequence(msg: String) {
+            description("illegal escape sequence in string or bytes")
             display(x) -> ("{}: {}", x.description(), msg)
         }
     }

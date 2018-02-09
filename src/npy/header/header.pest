@@ -2,7 +2,7 @@
 header = { soi ~ dict ~ "\n" ~ eoi }
 
 // Literal expression.
-expr = { string | number_expr | tuple | list | dict | set | boolean | none }
+expr = { string | bytes | number_expr | tuple | list | dict | set | boolean | none }
 
 // Strings: "string", 'string', """string""", and '''string'''.
 // Raw strings are not implemented.
@@ -22,15 +22,37 @@ long_string_body = ${
 long_string_non_escape = @{
     (!("\\" | peek) ~ any)+
 }
-string_escape_seq = ${ "\\" ~ (char_escape | octal_escape | hex_escape | name_escape) }
+string_escape_seq = ${ "\\" ~ (char_escape | octal_escape | hex_escape | unicode_hex_escape | name_escape) }
+unicode_hex_escape = @{ "u" ~ hex_digit{4} | "U" ~ hex_digit{8} }
+name_escape = @{ "N{" ~ (!"}" ~ any)* ~ "}" }
 string_unknown_escape = @{ "\\" ~ any }
+
+// Bytes: b"bytes", b'bytes', b"""bytes""", b'''bytes''', B"bytes", ...
+// Raw bytes are not implemented.
+bytes = ${
+    (("b" | "B") ~ push("\"" | "'") ~ short_bytes_body ~ pop) |
+    (("b" | "B") ~ push("\"\"\"" | "'''") ~ long_bytes_body ~ pop)
+}
+short_bytes_body = ${
+    (short_bytes_non_escape | line_continuation_seq | bytes_escape_seq | bytes_unknown_escape)*
+}
+short_bytes_non_escape = @{
+    (!("\\" | newline | peek) ~ ascii_char)+
+}
+long_bytes_body = ${
+    (long_bytes_non_escape | line_continuation_seq | bytes_escape_seq | bytes_unknown_escape)*
+}
+long_bytes_non_escape = @{
+    (!("\\" | peek) ~ ascii_char)+
+}
+bytes_escape_seq = ${ "\\" ~ (char_escape | octal_escape | hex_escape) }
+bytes_unknown_escape = @{ "\\" ~ ascii_char }
+
+// Escape sequences common to strings and bytes.
 line_continuation_seq = @{ "\\" ~ newline }
 char_escape = @{ "\\" | "'" | "\"" | "a" | "b" | "f" | "n" | "r" | "t" | "v" }
 octal_escape = @{ oct_digit{1, 3} }
-hex_escape = @{ "x" ~ hex_digit{2} | "u" ~ hex_digit{4} | "U" ~ hex_digit{8} }
-name_escape = @{ "N{" ~ (!"}" ~ any)* ~ "}" }
-
-// Bytes: TODO
+hex_escape = @{ "x" ~ hex_digit{2} }
 
 // Number expressions.
 number_expr = { ("+" | minus_sign)* ~ number ~ (("+" | minus_sign)+ ~ number)* }
@@ -76,6 +98,7 @@ boolean = @{ "True" | "False" }
 none = @{ "None" }
 
 // Character classes.
+ascii_char = @{ '\x00'..'\x7f' }
 hex_digit = @{ '0'..'9' | 'A'..'F' | 'a'..'f' }
 digit = @{ '0'..'9' }
 oct_digit = @{ '0'..'7' }
