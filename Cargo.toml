@@ -2,6 +2,14 @@
 name = "ndarray-npy"
 version = "0.1.0"
 authors = ["Jim Turner <ndarray-npy@turner.link>"]
+license = "MIT/Apache-2.0"
+repository = "https://github.com/jturner314/ndarray-npy"
+description = ".npy and .npz file format support for ndarray"
+keywords = ["npy", "npz", "ndarray", "numpy", "array"]
+categories = ["parser-implementations", "encoding", "science"]
+
+[badges]
+travis-ci = { repository = "jturner314/ndarray-npy", branch = "master" }
 
 [dependencies]
 byteorder = "1.2"
