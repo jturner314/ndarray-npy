@@ -11,26 +11,24 @@ string = ${
     (push("\"\"\"" | "'''") ~ long_string_body ~ pop)
 }
 short_string_body = ${
-    (short_string_non_escape | line_continuation_seq | string_escape_seq)*
+    (short_string_non_escape | line_continuation_seq | string_escape_seq | string_unknown_escape)*
 }
 short_string_non_escape = @{
     (!("\\" | newline | peek) ~ any)+
 }
 long_string_body = ${
-    (long_string_non_escape | line_continuation_seq | string_escape_seq)*
+    (long_string_non_escape | line_continuation_seq | string_escape_seq | string_unknown_escape)*
 }
 long_string_non_escape = @{
     (!("\\" | peek) ~ any)+
 }
+string_escape_seq = ${ "\\" ~ (char_escape | octal_escape | hex_escape | name_escape) }
+string_unknown_escape = @{ "\\" ~ any }
 line_continuation_seq = @{ "\\" ~ newline }
-string_escape_seq = ${"\\" ~ (
-    char_escape | octal_escape | hex_escape | name_escape | any_escape
-)}
 char_escape = @{ "\\" | "'" | "\"" | "a" | "b" | "f" | "n" | "r" | "t" | "v" }
 octal_escape = @{ oct_digit{1, 3} }
 hex_escape = @{ "x" ~ hex_digit{2} | "u" ~ hex_digit{4} | "U" ~ hex_digit{8} }
 name_escape = @{ "N{" ~ (!"}" ~ any)* ~ "}" }
-any_escape = @{ any }
 
 // Bytes: TODO
 
