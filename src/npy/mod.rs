@@ -6,7 +6,7 @@ use ndarray::prelude::*;
 use std::error::Error;
 use std::io;
 use std::mem;
-use self::header::{Header, HeaderParseError, PyExpr};
+use self::header::{FormatHeaderError, Header, HeaderParseError, PyExpr};
 
 /// An array element type that can be written to an `.npy` or `.npz` file.
 pub unsafe trait WritableElement: Sized {
@@ -29,6 +29,12 @@ quick_error! {
         /// An error caused by I/O.
         Io(err: io::Error) {
             description("I/O error")
+            display(x) -> ("{}: {}", x.description(), err)
+            cause(err)
+            from()
+        }
+        FormatHeader(err: FormatHeaderError) {
+            description("error formatting header")
             display(x) -> ("{}: {}", x.description(), err)
             cause(err)
             from()
@@ -82,7 +88,7 @@ where
                 type_descriptor: A::type_descriptor(),
                 fortran_order,
                 shape: self.shape().to_owned(),
-            }.to_bytes();
+            }.to_bytes()?;
             writer.write_all(&header)?;
             A::write_slice(self.as_slice_memory_order().unwrap(), &mut writer)
                 .map_err(|err| WriteNpyError::WritableElement(Box::new(err)))?;
@@ -97,7 +103,7 @@ where
                 type_descriptor: A::type_descriptor(),
                 fortran_order: false,
                 shape: self.shape().to_owned(),
-            }.to_bytes())?;
+            }.to_bytes()?)?;
             for elem in self.iter() {
                 elem.write(&mut writer)
                     .map_err(|err| WriteNpyError::WritableElement(Box::new(err)))?;

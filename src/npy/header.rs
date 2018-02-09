@@ -43,7 +43,7 @@ quick_error! {
             cause(err)
             from()
         }
-        UnknownKey(key: String) {
+        UnknownKey(key: PyExpr) {
             description("unknown key")
             display(x) -> ("{}: {}", x.description(), key)
         }
@@ -51,7 +51,7 @@ quick_error! {
             description("missing key")
             display(x) -> ("{}: {}", x.description(), key)
         }
-        IllegalValue(key: String, value: String) {
+        IllegalValue(key: String, value: PyExpr) {
             description("illegal value for key")
             display(x) -> ("{} {}: {}", x.description(), key, value)
         }
@@ -144,7 +144,7 @@ macro_rules! parse_pairs_as {
         {
             let iter = &mut $pair;
             let out = parse_pairs_as!(@recur iter, (), ($($rules),*,));
-            debug_assert_match!(None, iter.next());
+            debug_assert_match!(Option::None, iter.next());
             out
         }
     };
@@ -271,8 +271,126 @@ fn parse_string(string: Pair<Rule>) -> Result<String, HeaderParseError> {
     }
 }
 
-fn parse_bool(b: Pair<Rule>) -> bool {
-    debug_assert_eq!(b.as_rule(), Rule::bool);
+fn parse_number_expr(expr: Pair<Rule>) -> PyExpr {
+    debug_assert_eq!(expr.as_rule(), Rule::number_expr);
+    let mut result = PyExpr::Integer(0);
+    let mut neg = false;
+    for pair in expr.into_inner() {
+        match pair.as_rule() {
+            Rule::minus_sign => neg = !neg,
+            Rule::number => {
+                let num = parse_number(pair);
+                if neg {
+                    result = sub_numbers(result, num).unwrap();
+                } else {
+                    result = add_numbers(result, num).unwrap();
+                }
+                neg = false;
+            }
+            _ => unreachable!(),
+        }
+    }
+    result
+}
+
+fn parse_number(number: Pair<Rule>) -> PyExpr {
+    debug_assert_eq!(number.as_rule(), Rule::number);
+    let (inner,) = parse_pairs_as!(number.into_inner(), (_,));
+    match inner.as_rule() {
+        Rule::imag => parse_imag(inner),
+        Rule::float => PyExpr::Float(parse_float(inner)),
+        Rule::integer => PyExpr::Integer(parse_integer(inner)),
+        _ => unreachable!(),
+    }
+}
+
+fn parse_integer(int: Pair<Rule>) -> i64 {
+    debug_assert_eq!(int.as_rule(), Rule::integer);
+    let (inner,) = parse_pairs_as!(int.into_inner(), (_,));
+    match inner.as_rule() {
+        Rule::bin_integer => {
+            let digits: String = inner.into_inner().map(|digit| digit.as_str()).collect();
+            i64::from_str_radix(&digits, 2).expect(&format!(
+                "failure parsing binary integer with digits {}",
+                digits
+            ))
+        }
+        Rule::oct_integer => {
+            let digits: String = inner.into_inner().map(|digit| digit.as_str()).collect();
+            i64::from_str_radix(&digits, 8).expect(&format!(
+                "failure parsing octal integer with digits {}",
+                digits
+            ))
+        }
+        Rule::hex_integer => {
+            let digits: String = inner.into_inner().map(|digit| digit.as_str()).collect();
+            i64::from_str_radix(&digits, 16).expect(&format!(
+                "failure parsing hexadecimal integer with digits {}",
+                digits
+            ))
+        }
+        Rule::dec_integer => {
+            let digits: String = inner.into_inner().map(|digit| digit.as_str()).collect();
+            digits
+                .parse()
+                .expect(&format!("failure parsing integer with digits {}", digits))
+        }
+        _ => unreachable!(),
+    }
+}
+
+fn parse_float(float: Pair<Rule>) -> f64 {
+    debug_assert_eq!(float.as_rule(), Rule::float);
+    let (inner,) = parse_pairs_as!(float.into_inner(), (_,));
+    let mut parsable = String::new();
+    for pair in inner.into_inner().flatten() {
+        match pair.as_rule() {
+            Rule::digit => parsable.push_str(pair.as_str()),
+            Rule::fraction => parsable.push('.'),
+            Rule::pos_exponent => parsable.push('e'),
+            Rule::neg_exponent => parsable.push_str("e-"),
+            _ => (),
+        }
+    }
+    parsable
+        .parse()
+        .expect(&format!("Failure parsing {}", parsable))
+}
+
+fn parse_imag(imag: Pair<Rule>) -> PyExpr {
+    debug_assert_eq!(imag.as_rule(), Rule::imag);
+    let (inner,) = parse_pairs_as!(imag.into_inner(), (_,));
+    let imag = match inner.as_rule() {
+        Rule::float => parse_float(inner),
+        Rule::digit_part => {
+            let digits: String = inner.into_inner().map(|digit| digit.as_str()).collect();
+            digits
+                .parse()
+                .expect(&format!("failure parsing imag with digits {}", digits))
+        }
+        _ => unreachable!(),
+    };
+    PyExpr::Complex(0., imag)
+}
+
+/// Parses a tuple, list, or set.
+fn parse_seq(seq: Pair<Rule>) -> Result<Vec<PyExpr>, HeaderParseError> {
+    debug_assert!([Rule::tuple, Rule::list, Rule::set].contains(&seq.as_rule()));
+    seq.into_inner().map(|elem| parse_expr(elem)).collect()
+}
+
+fn parse_dict(dict: Pair<Rule>) -> Result<Vec<(PyExpr, PyExpr)>, HeaderParseError> {
+    debug_assert_eq!(dict.as_rule(), Rule::dict);
+    let mut out = Vec::new();
+    for elem in dict.into_inner() {
+        let (key, value) = parse_pairs_as!(elem.into_inner(), (Rule::expr, Rule::expr));
+        out.push((parse_expr(key)?, parse_expr(value)?));
+    }
+    Ok(out)
+}
+
+fn parse_boolean(b: Pair<Rule>) -> bool {
+    debug_assert_eq!(b.as_rule(), Rule::boolean);
     match b.as_str() {
         "True" => true,
         "False" => false,
@@ -280,28 +398,73 @@ fn parse_bool(b: Pair<Rule>) -> bool {
     }
 }
 
-fn parse_usize(u: Pair<Rule>) -> Result<usize, HeaderParseError> {
-    debug_assert_eq!(u.as_rule(), Rule::usize);
-    Ok(u.as_str().parse()?)
+fn parse_none(none: Pair<Rule>) -> PyExpr {
+    debug_assert_eq!(none.as_rule(), Rule::none);
+    PyExpr::None
 }
 
-fn parse_shape(t: Pair<Rule>) -> Result<Vec<usize>, HeaderParseError> {
-    debug_assert_eq!(t.as_rule(), Rule::shape);
-    let mut shape = Vec::new();
-    for pair in t.into_inner() {
-        if let Rule::usize = pair.as_rule() {
-            shape.push(parse_usize(pair)?);
-        } else {
-            unreachable!()
-        }
+/// NumPy uses [`ast.literal_eval()`] to parse the header dictionary.
+/// `literal_eval()` supports only the following Python literals: strings,
+/// bytes, numbers, tuples, lists, dicts, sets, booleans, and `None`.
+///
+/// [`ast.literal_eval()`]: https://docs.python.org/3/library/ast.html#ast.literal_eval
+fn parse_expr(expr: Pair<Rule>) -> Result<PyExpr, HeaderParseError> {
+    debug_assert_eq!(expr.as_rule(), Rule::expr);
+    let (inner,) = parse_pairs_as!(expr.into_inner(), (_,));
+    match inner.as_rule() {
+        Rule::string => Ok(PyExpr::String(parse_string(inner)?)),
+        Rule::number_expr => Ok(parse_number_expr(inner)),
+        Rule::tuple => Ok(PyExpr::Tuple(parse_seq(inner)?)),
+        Rule::list => Ok(PyExpr::List(parse_seq(inner)?)),
+        Rule::dict => Ok(PyExpr::Dict(parse_dict(inner)?)),
+        Rule::set => Ok(PyExpr::Set(parse_seq(inner)?)),
+        Rule::boolean => Ok(PyExpr::Boolean(parse_boolean(inner))),
+        Rule::none => Ok(parse_none(inner)),
+        _ => unreachable!(),
     }
-    Ok(shape)
 }
 
-#[derive(Clone, Debug)]
+/// Represents a Python literal expression.
+///
+/// This should be able to express everything that Python's
+/// [`ast.literal_eval()`] can evaluate, except for operators. Similar to
+/// `literal_eval()`, addition and subtraction of numbers is supported in the
+/// parser. However, binary addition and subtraction operators cannot be
+/// formatted using `PyExpr`.
+///
+/// [`ast.literal_eval()`]: https://docs.python.org/3/library/ast.html#ast.literal_eval
+#[derive(Clone, Debug, PartialEq)]
 pub enum PyExpr {
+    /// Python string (`str`). When parsing, backslash escapes are interpreted.
+    /// When formatting, backslash escapes are used to ensure the result is
+    /// contains only ASCII chars.
     String(String),
-    // TODO
+    /// Python byte sequence (`bytes`). When parsing, backslash escapes are
+    /// interpreted. When formatting, backslash escapes are used to ensure the
+    /// result is contains only ASCII chars.
+    Bytes(Vec<u8>),
+    /// Python integer (`int`). Python integers have unlimited precision, but
+    /// `i64` should be good enough for our needs.
+    Integer(i64),
+    /// Python floating-point number (`float`). The representation and
+    /// precision of the Python `float` type varies by the machine where the
+    /// program is executing, but `f64` should be good enough.
+    Float(f64),
+    /// Python complex number (`complex`). The Python `complex` type contains
+    /// two `float` types.
+    Complex(f64, f64),
+    /// Python tuple (`tuple`).
+    Tuple(Vec<PyExpr>),
+    /// Python list (`list`).
+    List(Vec<PyExpr>),
+    /// Python dictionary (`dict`).
+    Dict(Vec<(PyExpr, PyExpr)>),
+    /// Python set (`set`).
+    Set(Vec<PyExpr>),
+    /// Python boolean (`bool`).
+    Boolean(bool),
+    /// Python `None`.
+    None,
 }
 
 impl<'a> From<&'a str> for PyExpr {
@@ -313,6 +476,47 @@ impl<'a> From<&'a str> for PyExpr {
 impl From<String> for PyExpr {
     fn from(s: String) -> PyExpr {
         PyExpr::String(s)
+    }
+}
+
+/// Adds two numbers.
+///
+/// Returns `Err` if either of the arguments is not a number.
+fn add_numbers(lhs: PyExpr, rhs: PyExpr) -> Result<PyExpr, ()> {
+    use self::PyExpr::*;
+    match (lhs, rhs) {
+        (Integer(int1), Integer(int2)) => Ok(Integer(int1 + int2)),
+        (Float(float1), Float(float2)) => Ok(Float(float1 + float2)),
+        (Complex(real1, imag1), Complex(real2, imag2)) => Ok(Complex(real1 + real2, imag1 + imag2)),
+        (Integer(int), Float(float)) | (Float(float), Integer(int)) => {
+            Ok(Float(int as f64 + float))
+        }
+        (Integer(int), Complex(real, imag)) | (Complex(real, imag), Integer(int)) => {
+            Ok(Complex(int as f64 + real, imag))
+        }
+        (Float(float), Complex(real, imag)) | (Complex(real, imag), Float(float)) => {
+            Ok(Complex(float + real, imag))
+        }
+        _ => Err(()),
+    }
+}
+
+/// Subtracts two numbers.
+///
+/// Returns `Err` if either of the arguments is not a number.
+fn sub_numbers(lhs: PyExpr, rhs: PyExpr) -> Result<PyExpr, ()> {
+    use self::PyExpr::*;
+    match (lhs, rhs) {
+        (Integer(int1), Integer(int2)) => Ok(Integer(int1 - int2)),
+        (Integer(int), Float(float)) => Ok(Float(int as f64 - float)),
+        (Integer(int), Complex(real, imag)) => Ok(Complex(int as f64 - real, -imag)),
+        (Float(float), Integer(int)) => Ok(Float(float - int as f64)),
+        (Float(float1), Float(float2)) => Ok(Float(float1 - float2)),
+        (Float(float), Complex(real, imag)) => Ok(Complex(float - real, -imag)),
+        (Complex(real, imag), Integer(int)) => Ok(Complex(real - int as f64, imag)),
+        (Complex(real, imag), Float(float)) => Ok(Complex(real - float, imag)),
+        (Complex(real1, imag1), Complex(real2, imag2)) => Ok(Complex(real1 - real2, imag1 - imag2)),
+        _ => Err(()),
     }
 }
 
@@ -333,66 +537,135 @@ impl fmt::Display for PyExpr {
                             n @ 0...0xffff => write!(f, r"\u{:0>4x}", n)?,
                             n @ 0...0xffffffff => write!(f, r"\U{:0>8x}", n)?,
                             _ => unreachable!(),
-                        }
+                        },
                     }
                 }
                 f.write_char('\'')?;
                 Ok(())
             }
+            PyExpr::Bytes(ref bytes) => {
+                f.write_str("b'")?;
+                for byte in bytes {
+                    match *byte {
+                        b'\\' => f.write_str(r"\\")?,
+                        b'\r' => f.write_str(r"\r")?,
+                        b'\n' => f.write_str(r"\n")?,
+                        b'\'' => f.write_str(r"\'")?,
+                        b if b.is_ascii() => f.write_char(b.into())?,
+                        b => write!(f, r"\x{:0>2x}", b)?,
+                    }
+                }
+                f.write_char('\'')?;
+                Ok(())
+            }
+            PyExpr::Integer(int) => write!(f, "{}", int),
+            PyExpr::Float(float) => {
+                // Use scientific notation to make this unambiguously a float.
+                write!(f, "{:e}", float)
+            }
+            PyExpr::Complex(real, imag) => {
+                // Use scientific notation to make the parts unambiguously floats.
+                write!(f, "{:e}{:+e}j", real, imag)
+            }
+            PyExpr::Tuple(ref tup) => {
+                f.write_char('(')?;
+                match tup.len() {
+                    0 => (),
+                    1 => write!(f, "{},", tup[0])?,
+                    _ => {
+                        write!(f, "{}", tup[0])?;
+                        for expr in &tup[1..] {
+                            write!(f, ", {}", expr)?;
+                        }
+                    }
+                }
+                f.write_char(')')
+            }
+            PyExpr::List(ref list) => {
+                f.write_char('[')?;
+                if !list.is_empty() {
+                    write!(f, "{}", list[0])?;
+                    for expr in &list[1..] {
+                        write!(f, ", {}", expr)?;
+                    }
+                }
+                f.write_char(']')
+            }
+            PyExpr::Dict(ref dict) => {
+                f.write_char('{')?;
+                if !dict.is_empty() {
+                    write!(f, "{}: {}", dict[0].0, dict[0].1)?;
+                    for expr in &dict[1..] {
+                        write!(f, ", {}: {}", expr.0, expr.1)?;
+                    }
+                }
+                f.write_char('}')
+            }
+            PyExpr::Set(ref set) => {
+                if set.is_empty() {
+                    // There is no way to write an empty set literal in Python.
+                    return Err(fmt::Error);
+                } else {
+                    f.write_char('{')?;
+                    write!(f, "{}", set[0])?;
+                    for expr in &set[1..] {
+                        write!(f, ", {}", expr)?;
+                    }
+                    f.write_char('}')
+                }
+            }
+            PyExpr::Boolean(b) => {
+                if b {
+                    f.write_str("True")
+                } else {
+                    f.write_str("False")
+                }
+            }
+            PyExpr::None => f.write_str("None"),
         }
-    }
-}
-
-fn parse_py_expr(expr: Pair<Rule>) -> Result<PyExpr, HeaderParseError> {
-    match expr.as_rule() {
-        Rule::string => Ok(PyExpr::String(parse_string(expr)?)),
-        _ => unimplemented!(),
     }
 }
 
 fn parse_header(h: Pair<Rule>) -> Result<Header, HeaderParseError> {
     debug_assert_eq!(h.as_rule(), Rule::header);
-    let mut key: Option<String> = None;
+    let (dict,) = parse_pairs_as!(h.into_inner(), (Rule::dict,));
     let mut type_descriptor: Option<PyExpr> = None;
     let mut fortran_order: Option<bool> = None;
     let mut shape: Option<Vec<usize>> = None;
-    for pair in h.into_inner() {
-        match pair.as_rule() {
-            Rule::key => {
-                let (k,) = parse_pairs_as!(pair.into_inner(), (Rule::string,));
-                key = Some(parse_string(k)?)
+    for (key, value) in parse_dict(dict)? {
+        match key {
+            PyExpr::String(ref k) if k == "descr" => {
+                type_descriptor = Some(value);
             }
-            Rule::value => match key.as_ref() {
-                Some(k) if k == "descr" => {
-                    let (value,) = parse_pairs_as!(pair.into_inner(), (_,));
-                    type_descriptor = Some(parse_py_expr(value)?);
+            PyExpr::String(ref k) if k == "fortran_order" => {
+                if let PyExpr::Boolean(b) = value {
+                    fortran_order = Some(b);
+                } else {
+                    return Err(HeaderParseError::IllegalValue(
+                        "fortran_order".to_owned(),
+                        value,
+                    ));
                 }
-                Some(k) if k == "fortran_order" => {
-                    let (value,) = parse_pairs_as!(pair.into_inner(), (_,));
-                    if let Rule::bool = value.as_rule() {
-                        fortran_order = Some(parse_bool(value));
-                    } else {
-                        return Err(HeaderParseError::IllegalValue(
-                            "fortran_order".to_owned(),
-                            value.as_str().to_owned(),
-                        ));
+            }
+            PyExpr::String(ref k) if k == "shape" => {
+                if let PyExpr::Tuple(ref tuple) = value {
+                    let mut out = Vec::with_capacity(tuple.len());
+                    for elem in tuple {
+                        if let &PyExpr::Integer(int) = elem {
+                            out.push(int as usize);
+                        } else {
+                            return Err(HeaderParseError::IllegalValue(
+                                "shape".to_owned(),
+                                value.clone(),
+                            ));
+                        }
                     }
+                    shape = Some(out);
+                } else {
+                    return Err(HeaderParseError::IllegalValue("shape".to_owned(), value));
                 }
-                Some(k) if k == "shape" => {
-                    let (value,) = parse_pairs_as!(pair.into_inner(), (_,));
-                    if let Rule::shape = value.as_rule() {
-                        shape = Some(parse_shape(value)?);
-                    } else {
-                        return Err(HeaderParseError::IllegalValue(
-                            "shape".to_owned(),
-                            value.as_str().to_owned(),
-                        ));
-                    }
-                }
-                Some(k) => return Err(HeaderParseError::UnknownKey(k.to_owned())),
-                None => unreachable!(),
-            },
-            _ => unreachable!(),
+            }
+            k => return Err(HeaderParseError::UnknownKey(k)),
         }
     }
     match (type_descriptor, fortran_order, shape) {
@@ -485,6 +758,24 @@ pub struct Header {
     pub shape: Vec<usize>,
 }
 
+quick_error! {
+    #[derive(Debug)]
+    pub enum FormatHeaderError {
+        Format(err: fmt::Error) {
+            description("error formatting header; this is most likely due to a zero-size set")
+            display(x) -> ("{}", x.description())
+            cause(err)
+            from()
+        }
+    }
+}
+
+impl fmt::Display for Header {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "{}", self.to_py_expr())
+    }
+}
+
 impl Header {
     pub fn from_reader<R: io::Read>(mut reader: R) -> Result<Self, ReadNpyError> {
         // Check for magic string.
@@ -515,20 +806,29 @@ impl Header {
         Ok(parse_header(header)?)
     }
 
-    pub fn to_bytes(&self) -> Vec<u8> {
+    fn to_py_expr(&self) -> PyExpr {
+        PyExpr::Dict(vec![
+            (PyExpr::String("descr".into()), self.type_descriptor.clone()),
+            (
+                PyExpr::String("fortran_order".into()),
+                PyExpr::Boolean(self.fortran_order),
+            ),
+            (
+                PyExpr::String("shape".into()),
+                PyExpr::Tuple(
+                    self.shape
+                        .iter()
+                        .map(|&elem| PyExpr::Integer(elem as i64))
+                        .collect(),
+                ),
+            ),
+        ])
+    }
+
+    pub fn to_bytes(&self) -> Result<Vec<u8>, FormatHeaderError> {
         // Metadata describing array's format as ASCII string.
-        let mut arr_format = format!(
-            "{{'descr': {}, 'fortran_order': {}, 'shape': (",
-            self.type_descriptor,
-            if self.fortran_order { "True" } else { "False" },
-        );
-        for (i, axis_len) in self.shape.iter().enumerate() {
-            arr_format.push_str(&format!("{}", axis_len));
-            if self.shape.len() == 1 || self.shape.len() != 0 && i != self.shape.len() - 1 {
-                arr_format.push(',');
-            }
-        }
-        arr_format.push_str("), }");
+        let mut arr_format = String::new();
+        fmt::write(&mut arr_format, format_args!("{}", self))?;
 
         // Length of a '\n' char in bytes.
         const NEWLINE_LEN: usize = 1;
@@ -563,7 +863,7 @@ impl Header {
         // Verify that length of header is divisible by 16.
         debug_assert_eq!(out.len() % 16, 0);
 
-        out
+        Ok(out)
     }
 }
 
@@ -576,15 +876,249 @@ mod test {
         let input = r"'hello\th\03o\x1bw\
 are\a\'y\u1234o\U00031234u'";
         let mut parsed = HeaderParser::parse(Rule::string, input)
-            .unwrap_or_else(|err| panic!("failed to parse as {:?}: {}", Rule::string, err));
+            .unwrap_or_else(|err| panic!("failed to parse: {}", err));
         let s = parse_string(parse_pairs_as!(parsed, (Rule::string,)).0).unwrap();
         assert_eq!(s, "hello\th\x03o\x1bware\x07'y\u{1234}o\u{31234}u");
     }
 
     #[test]
-    fn format_string_example() {
+    fn parse_number_expr_example() {
+        let input = "+-23 + 4.5 -+- -5j - 3e2";
+        let mut parsed = HeaderParser::parse(Rule::number_expr, input)
+            .unwrap_or_else(|err| panic!("failed to parse: {}", err));
+        let expr = parse_number_expr(parse_pairs_as!(parsed, (Rule::number_expr,)).0);
+        assert_eq!(expr, PyExpr::Complex(-23. + 4.5 - 3e2, -5.));
+    }
+
+    #[test]
+    fn parse_integer_example() {
+        let inputs = ["0b_1001_0010_1010", "0o44_52", "0x9_2a", "2_346"];
+        for input in &inputs {
+            let mut parsed = HeaderParser::parse(Rule::integer, input)
+                .unwrap_or_else(|err| panic!("failed to parse: {}", err));
+            let int = parse_integer(parse_pairs_as!(parsed, (Rule::integer,)).0);
+            assert_eq!(int, 2346);
+        }
+    }
+
+    #[test]
+    fn parse_float_example() {
+        let input = "3_51.4_6e-2_7";
+        let mut parsed = HeaderParser::parse(Rule::float, input)
+            .unwrap_or_else(|err| panic!("failed to parse: {}", err));
+        let float = parse_float(parse_pairs_as!(parsed, (Rule::float,)).0);
+        assert_eq!(float, 351.46e-27);
+    }
+
+    #[test]
+    fn parse_tuple_example() {
+        use self::PyExpr::*;
+        for &(input, ref correct) in &[
+            ("()", Tuple(vec![])),
+            ("(5, )", Tuple(vec![Integer(5)])),
+            ("(1, 2)", Tuple(vec![Integer(1), Integer(2)])),
+            ("(1, 2,)", Tuple(vec![Integer(1), Integer(2)])),
+        ] {
+            let mut parsed = HeaderParser::parse(Rule::expr, input)
+                .unwrap_or_else(|err| panic!("failed to parse: {}", err));
+            let tuple = parse_expr(parse_pairs_as!(parsed, (Rule::expr,)).0).unwrap();
+            assert_eq!(tuple, *correct);
+        }
+    }
+
+    #[test]
+    fn parse_list_example() {
+        use self::PyExpr::*;
+        for &(input, ref correct) in &[
+            ("[]", List(vec![])),
+            ("[3]", List(vec![Integer(3)])),
+            ("[5,]", List(vec![Integer(5)])),
+            ("[1, 2]", List(vec![Integer(1), Integer(2)])),
+            (
+                "[5, 6., \"foo\", 2+7j,]",
+                List(vec![
+                    Integer(5),
+                    Float(6.),
+                    String("foo".into()),
+                    Complex(2., 7.),
+                ]),
+            ),
+        ] {
+            let mut parsed = HeaderParser::parse(Rule::expr, input)
+                .unwrap_or_else(|err| panic!("failed to parse: {}", err));
+            let list = parse_expr(parse_pairs_as!(parsed, (Rule::expr,)).0).unwrap();
+            assert_eq!(list, *correct);
+        }
+    }
+
+    #[test]
+    fn parse_dict_example() {
+        use self::PyExpr::*;
+        for &(input, ref correct) in &[
+            ("{}", Dict(vec![])),
+            ("{3: \"hi\"}", Dict(vec![(Integer(3), String("hi".into()))])),
+            (
+                "{5: 6., \"foo\" : True}",
+                Dict(vec![
+                    (Integer(5), Float(6.)),
+                    (String("foo".into()), Boolean(true)),
+                ]),
+            ),
+        ] {
+            let mut parsed = HeaderParser::parse(Rule::expr, input)
+                .unwrap_or_else(|err| panic!("failed to parse: {}", err));
+            let dict = parse_expr(parse_pairs_as!(parsed, (Rule::expr,)).0).unwrap();
+            assert_eq!(dict, *correct);
+        }
+    }
+
+    #[test]
+    fn parse_set_example() {
+        use self::PyExpr::*;
+        for &(input, ref correct) in &[
+            ("{3}", Set(vec![Integer(3)])),
+            ("{5,}", Set(vec![Integer(5)])),
+            ("{1, 2}", Set(vec![Integer(1), Integer(2)])),
+        ] {
+            let mut parsed = HeaderParser::parse(Rule::expr, input)
+                .unwrap_or_else(|err| panic!("failed to parse: {}", err));
+            let set = parse_expr(parse_pairs_as!(parsed, (Rule::expr,)).0).unwrap();
+            assert_eq!(set, *correct);
+        }
+    }
+
+    #[test]
+    fn parse_list_of_tuples_example() {
+        use self::PyExpr::*;
+        for &(input, ref correct) in &[
+            (
+                "[('big', '>i4'), ('little', '<i4')]",
+                List(vec![
+                    Tuple(vec![String("big".into()), String(">i4".into())]),
+                    Tuple(vec![String("little".into()), "<i4".into()]),
+                ]),
+            ),
+            (
+                "[(1, 2, 3), (4,)]",
+                List(vec![
+                    Tuple(vec![Integer(1), Integer(2), Integer(3)]),
+                    Tuple(vec![Integer(4)]),
+                ]),
+            ),
+        ] {
+            let mut parsed = HeaderParser::parse(Rule::expr, input)
+                .unwrap_or_else(|err| panic!("failed to parse: {}", err));
+            let list = parse_expr(parse_pairs_as!(parsed, (Rule::expr,)).0).unwrap();
+            assert_eq!(list, *correct);
+        }
+    }
+
+    #[test]
+    fn format_string() {
         let expr = PyExpr::String("hello\th\x03\u{ff}o\x1bware\x07'y\u{1234}o\u{31234}u".into());
         let formatted = format!("{}", expr);
-        assert_eq!(formatted, "'hello\th\x03\\xffo\x1bware\x07\\'y\\u1234o\\U00031234u'")
+        assert_eq!(
+            formatted,
+            "'hello\th\x03\\xffo\x1bware\x07\\'y\\u1234o\\U00031234u'"
+        )
+    }
+
+    #[test]
+    fn format_bytes() {
+        let expr = PyExpr::Bytes(b"hello\th\x03\xffo\x1bware\x07'you"[..].into());
+        let formatted = format!("{}", expr);
+        assert_eq!(formatted, "b'hello\th\x03\\xffo\x1bware\x07\\'you'")
+    }
+
+    #[test]
+    fn format_complex() {
+        use self::PyExpr::*;
+        assert_eq!("1e0+3e0j", format!("{}", Complex(1., 3.)));
+        assert_eq!("1e0-3e0j", format!("{}", Complex(1., -3.)));
+        assert_eq!("-1e0+3e0j", format!("{}", Complex(-1., 3.)));
+        assert_eq!("-1e0-3e0j", format!("{}", Complex(-1., -3.)));
+    }
+
+    #[test]
+    fn format_tuple() {
+        use self::PyExpr::*;
+        assert_eq!("()", format!("{}", Tuple(vec![])));
+        assert_eq!("(1,)", format!("{}", Tuple(vec![Integer(1)])));
+        assert_eq!("(1, 2)", format!("{}", Tuple(vec![Integer(1), Integer(2)])));
+        assert_eq!(
+            "(1, 2, 'hi')",
+            format!(
+                "{}",
+                Tuple(vec![Integer(1), Integer(2), String("hi".into())])
+            ),
+        );
+    }
+
+    #[test]
+    fn format_list() {
+        use self::PyExpr::*;
+        assert_eq!("[]", format!("{}", List(vec![])));
+        assert_eq!("[1]", format!("{}", List(vec![Integer(1)])));
+        assert_eq!("[1, 2]", format!("{}", List(vec![Integer(1), Integer(2)])));
+        assert_eq!(
+            "[1, 2, 'hi']",
+            format!(
+                "{}",
+                List(vec![Integer(1), Integer(2), String("hi".into())])
+            ),
+        );
+    }
+
+    #[test]
+    fn format_dict() {
+        use self::PyExpr::*;
+        assert_eq!("{}", format!("{}", Dict(vec![])));
+        assert_eq!(
+            "{1: 2}",
+            format!("{}", Dict(vec![(Integer(1), Integer(2))]))
+        );
+        assert_eq!(
+            "{1: 2, 'foo': 'bar'}",
+            format!(
+                "{}",
+                Dict(vec![
+                    (Integer(1), Integer(2)),
+                    (String("foo".into()), String("bar".into())),
+                ])
+            ),
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn format_empty_set() {
+        use self::PyExpr::*;
+        format!("{}", Set(vec![]));
+    }
+
+    #[test]
+    fn format_set() {
+        use self::PyExpr::*;
+        assert_eq!("{1}", format!("{}", Set(vec![Integer(1)])));
+        assert_eq!("{1, 2}", format!("{}", Set(vec![Integer(1), Integer(2)])));
+        assert_eq!(
+            "{1, 2, 'hi'}",
+            format!("{}", Set(vec![Integer(1), Integer(2), String("hi".into())])),
+        );
+    }
+
+    #[test]
+    fn format_nested() {
+        use self::PyExpr::*;
+        assert_eq!(
+            "{'foo': [1, True], {2e0+3e0j}: 4}",
+            format!(
+                "{}",
+                Dict(vec![
+                    (String("foo".into()), List(vec![Integer(1), Boolean(true)])),
+                    (Set(vec![Complex(2., 3.)]), Integer(4)),
+                ])
+            ),
+        );
     }
 }

@@ -1,9 +1,11 @@
-header = { soi ~ "{" ~ (key ~ ":" ~ value ~ ",")* ~ (key ~ ":" ~ value)? ~ "}" ~ "\n" ~ eoi }
+// Header dict.
+header = { soi ~ dict ~ "\n" ~ eoi }
 
-key = { string }
-value = { string | bool | shape }
+// Literal expression.
+expr = { string | number_expr | tuple | list | dict | set | boolean | none }
 
-// "string", 'string', """string""", and '''string'''
+// Strings: "string", 'string', """string""", and '''string'''.
+// Raw strings are not implemented.
 string = ${
     (push("\"" | "'") ~ short_string_body ~ pop) |
     (push("\"\"\"" | "'''") ~ long_string_body ~ pop)
@@ -25,22 +27,60 @@ string_escape_seq = ${"\\" ~ (
     char_escape | octal_escape | hex_escape | name_escape | any_escape
 )}
 char_escape = @{ "\\" | "'" | "\"" | "a" | "b" | "f" | "n" | "r" | "t" | "v" }
-octal_escape = @{ octal_digit{1, 3} }
+octal_escape = @{ oct_digit{1, 3} }
 hex_escape = @{ "x" ~ hex_digit{2} | "u" ~ hex_digit{4} | "U" ~ hex_digit{8} }
 name_escape = @{ "N{" ~ (!"}" ~ any)* ~ "}" }
 any_escape = @{ any }
 
-// booleans
-bool = @{ "True" | "False" }
+// Bytes: TODO
 
-// Only parse decimal integers, and don't allow `_`.
-usize = @{ nonzerodigit ~ dec_digit* | "0"+ }
-nonzerodigit = @{ '1'..'9' }
+// Number expressions.
+number_expr = { ("+" | minus_sign)* ~ number ~ (("+" | minus_sign)+ ~ number)* }
+number = ${ imag | float | integer }
+minus_sign = @{ "-" }
 
-shape = { "(" ~ ((usize ~ ",")+ ~ usize?)? ~ ")" }
+// Integers.
+integer = ${ bin_integer | oct_integer | hex_integer | dec_integer }
+bin_integer = ${ "0" ~ ("b" | "B") ~ ("_"? ~ bin_digit)+ }
+oct_integer = ${ "0" ~ ("o" | "O") ~ ("_"? ~ oct_digit)+ }
+hex_integer = ${ "0" ~ ("x" | "X") ~ ("_"? ~ hex_digit)+ }
+dec_integer = ${ digit ~ ("_"? ~ digit)* }
 
+// Floats.
+float = ${ exponent_float | point_float }
+point_float = ${ digit_part? ~ fraction | digit_part ~ "." }
+exponent_float = ${ (point_float | digit_part) ~ (pos_exponent | neg_exponent) }
+digit_part = ${ digit ~ ("_"? ~ digit)* }
+fraction = ${ "." ~ digit_part }
+pos_exponent = ${ ("e" | "E") ~ "+"? ~ digit_part }
+neg_exponent = ${ ("e" | "E") ~ "-" ~ digit_part }
+
+// Imaginary number.
+imag = ${ (float | digit_part) ~ ("j" | "J") }
+
+// Tuples.
+tuple = { "(" ~ ((expr ~ ",")+ ~ expr?)? ~ ")" }
+
+// Lists.
+list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
+
+// Dictionaries.
+dict = { "{" ~ (dict_elem ~ ",")* ~ dict_elem? ~ "}" }
+dict_elem = { expr ~ ":" ~ expr }
+
+// Sets.
+set = { "{" ~ expr ~ ("," ~ expr)* ~ ","? ~ "}" }
+
+// Booleans.
+boolean = @{ "True" | "False" }
+
+// None.
+none = @{ "None" }
+
+// Character classes.
 hex_digit = @{ '0'..'9' | 'A'..'F' | 'a'..'f' }
-dec_digit = @{ '0'..'9' }
-octal_digit = @{ '0'..'7' }
+digit = @{ '0'..'9' }
+oct_digit = @{ '0'..'7' }
+bin_digit = @{ '0'..'1' }
 newline = @{ "\r\n" | "\n" | "\r" }
 whitespace = _{ " " | "\t" | "\x0C" }
