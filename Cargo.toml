@@ -14,6 +14,7 @@ travis-ci = { repository = "jturner314/ndarray-npy", branch = "master" }
 [dependencies]
 byteorder = "1.2"
 ndarray = "0.11"
+num = "0.1"
 pest = "1.0"
 pest_derive = "1.0"
 quick-error = "1.2"

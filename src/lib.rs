@@ -31,6 +31,7 @@
 
 extern crate byteorder;
 extern crate ndarray;
+extern crate num;
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;

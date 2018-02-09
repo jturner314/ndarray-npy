@@ -1,3 +1,4 @@
+use num::{BigInt, Complex, Num, ToPrimitive};
 use pest::iterators::Pair;
 use std::fmt::{self, Write};
 use super::{HeaderParseError, Rule};
@@ -116,7 +117,7 @@ pub fn parse_bytes(bytes: Pair<Rule>) -> Result<Vec<u8>, HeaderParseError> {
 
 pub fn parse_number_expr(expr: Pair<Rule>) -> PyExpr {
     debug_assert_eq!(expr.as_rule(), Rule::number_expr);
-    let mut result = PyExpr::Integer(0);
+    let mut result = PyExpr::Integer(0.into());
     let mut neg = false;
     for pair in expr.into_inner() {
         match pair.as_rule() {
@@ -147,27 +148,27 @@ pub fn parse_number(number: Pair<Rule>) -> PyExpr {
     }
 }
 
-pub fn parse_integer(int: Pair<Rule>) -> i64 {
+pub fn parse_integer(int: Pair<Rule>) -> BigInt {
     debug_assert_eq!(int.as_rule(), Rule::integer);
     let (inner,) = parse_pairs_as!(int.into_inner(), (_,));
     match inner.as_rule() {
         Rule::bin_integer => {
             let digits: String = inner.into_inner().map(|digit| digit.as_str()).collect();
-            i64::from_str_radix(&digits, 2).expect(&format!(
+            BigInt::from_str_radix(&digits, 2).expect(&format!(
                 "failure parsing binary integer with digits {}",
                 digits
             ))
         }
         Rule::oct_integer => {
             let digits: String = inner.into_inner().map(|digit| digit.as_str()).collect();
-            i64::from_str_radix(&digits, 8).expect(&format!(
+            BigInt::from_str_radix(&digits, 8).expect(&format!(
                 "failure parsing octal integer with digits {}",
                 digits
             ))
         }
         Rule::hex_integer => {
             let digits: String = inner.into_inner().map(|digit| digit.as_str()).collect();
-            i64::from_str_radix(&digits, 16).expect(&format!(
+            BigInt::from_str_radix(&digits, 16).expect(&format!(
                 "failure parsing hexadecimal integer with digits {}",
                 digits
             ))
@@ -213,7 +214,7 @@ pub fn parse_imag(imag: Pair<Rule>) -> PyExpr {
         }
         _ => unreachable!(),
     };
-    PyExpr::Complex(0., imag)
+    PyExpr::Complex(Complex::new(0., imag))
 }
 
 /// Parses a tuple, list, or set.
@@ -282,16 +283,16 @@ pub enum PyExpr {
     /// interpreted. When formatting, backslash escapes are used to ensure the
     /// result is contains only ASCII chars.
     Bytes(Vec<u8>),
-    /// Python integer (`int`). Python integers have unlimited precision, but
-    /// `i64` should be good enough for our needs.
-    Integer(i64),
+    /// Python integer (`int`). Python integers have unlimited precision, so we
+    /// use `BigInt`.
+    Integer(BigInt),
     /// Python floating-point number (`float`). The representation and
     /// precision of the Python `float` type varies by the machine where the
     /// program is executing, but `f64` should be good enough.
     Float(f64),
     /// Python complex number (`complex`). The Python `complex` type contains
     /// two `float` types.
-    Complex(f64, f64),
+    Complex(Complex<f64>),
     /// Python tuple (`tuple`).
     Tuple(Vec<PyExpr>),
     /// Python list (`list`).
@@ -318,44 +319,47 @@ impl From<String> for PyExpr {
     }
 }
 
+fn int_to_f64(int: BigInt) -> Result<f64, HeaderParseError> {
+    int.to_f64()
+        .ok_or_else(|| HeaderParseError::NumericCast(format!("{}", int), "f64".into()))
+}
+
 /// Adds two numbers.
 ///
-/// Returns `Err` if either of the arguments is not a number.
-fn add_numbers(lhs: PyExpr, rhs: PyExpr) -> Result<PyExpr, ()> {
+/// **Panics** if either of the arguments is not a number.
+fn add_numbers(lhs: PyExpr, rhs: PyExpr) -> Result<PyExpr, HeaderParseError> {
     use self::PyExpr::*;
     match (lhs, rhs) {
         (Integer(int1), Integer(int2)) => Ok(Integer(int1 + int2)),
         (Float(float1), Float(float2)) => Ok(Float(float1 + float2)),
-        (Complex(real1, imag1), Complex(real2, imag2)) => Ok(Complex(real1 + real2, imag1 + imag2)),
+        (Complex(comp1), Complex(comp2)) => Ok(Complex(comp1 + comp2)),
         (Integer(int), Float(float)) | (Float(float), Integer(int)) => {
-            Ok(Float(int as f64 + float))
+            Ok(Float(int_to_f64(int)? + float))
         }
-        (Integer(int), Complex(real, imag)) | (Complex(real, imag), Integer(int)) => {
-            Ok(Complex(int as f64 + real, imag))
+        (Integer(int), Complex(comp)) | (Complex(comp), Integer(int)) => {
+            Ok(Complex(int_to_f64(int)? + comp))
         }
-        (Float(float), Complex(real, imag)) | (Complex(real, imag), Float(float)) => {
-            Ok(Complex(float + real, imag))
-        }
-        _ => Err(()),
+        (Float(float), Complex(comp)) | (Complex(comp), Float(float)) => Ok(Complex(float + comp)),
+        _ => unimplemented!(),
     }
 }
 
 /// Subtracts two numbers.
 ///
-/// Returns `Err` if either of the arguments is not a number.
-fn sub_numbers(lhs: PyExpr, rhs: PyExpr) -> Result<PyExpr, ()> {
+/// **Panics** if either of the arguments is not a number.
+fn sub_numbers(lhs: PyExpr, rhs: PyExpr) -> Result<PyExpr, HeaderParseError> {
     use self::PyExpr::*;
     match (lhs, rhs) {
         (Integer(int1), Integer(int2)) => Ok(Integer(int1 - int2)),
-        (Integer(int), Float(float)) => Ok(Float(int as f64 - float)),
-        (Integer(int), Complex(real, imag)) => Ok(Complex(int as f64 - real, -imag)),
-        (Float(float), Integer(int)) => Ok(Float(float - int as f64)),
+        (Integer(int), Float(float)) => Ok(Float(int_to_f64(int)? - float)),
+        (Integer(int), Complex(comp)) => Ok(Complex(int_to_f64(int)? - comp)),
+        (Float(float), Integer(int)) => Ok(Float(float - int_to_f64(int)?)),
         (Float(float1), Float(float2)) => Ok(Float(float1 - float2)),
-        (Float(float), Complex(real, imag)) => Ok(Complex(float - real, -imag)),
-        (Complex(real, imag), Integer(int)) => Ok(Complex(real - int as f64, imag)),
-        (Complex(real, imag), Float(float)) => Ok(Complex(real - float, imag)),
-        (Complex(real1, imag1), Complex(real2, imag2)) => Ok(Complex(real1 - real2, imag1 - imag2)),
-        _ => Err(()),
+        (Float(float), Complex(comp)) => Ok(Complex(float - comp)),
+        (Complex(comp), Integer(int)) => Ok(Complex(comp - int_to_f64(int)?)),
+        (Complex(comp), Float(float)) => Ok(Complex(comp - float)),
+        (Complex(comp1), Complex(comp2)) => Ok(Complex(comp1 - comp2)),
+        _ => unimplemented!(),
     }
 }
 
@@ -397,14 +401,14 @@ impl fmt::Display for PyExpr {
                 f.write_char('\'')?;
                 Ok(())
             }
-            PyExpr::Integer(int) => write!(f, "{}", int),
+            PyExpr::Integer(ref int) => write!(f, "{}", int),
             PyExpr::Float(float) => {
                 // Use scientific notation to make this unambiguously a float.
                 write!(f, "{:e}", float)
             }
-            PyExpr::Complex(real, imag) => {
+            PyExpr::Complex(Complex { re, im }) => {
                 // Use scientific notation to make the parts unambiguously floats.
-                write!(f, "{:e}{:+e}j", real, imag)
+                write!(f, "{:e}{:+e}j", re, im)
             }
             PyExpr::Tuple(ref tup) => {
                 f.write_char('(')?;
@@ -467,6 +471,7 @@ impl fmt::Display for PyExpr {
 
 #[cfg(test)]
 mod test {
+    use num;
     use pest::Parser;
     use super::super::HeaderParser;
     use super::*;
@@ -511,7 +516,10 @@ are\a\'y\u1234o\U00031234u'",
         let mut parsed = HeaderParser::parse(Rule::number_expr, input)
             .unwrap_or_else(|err| panic!("failed to parse: {}", err));
         let expr = parse_number_expr(parse_pairs_as!(parsed, (Rule::number_expr,)).0);
-        assert_eq!(expr, PyExpr::Complex(-23. + 4.5 - 3e2, -5.));
+        assert_eq!(
+            expr,
+            PyExpr::Complex(-23. + 4.5 - 3e2 - Complex::new(0., 5.))
+        );
     }
 
     #[test]
@@ -521,7 +529,7 @@ are\a\'y\u1234o\U00031234u'",
             let mut parsed = HeaderParser::parse(Rule::integer, input)
                 .unwrap_or_else(|err| panic!("failed to parse: {}", err));
             let int = parse_integer(parse_pairs_as!(parsed, (Rule::integer,)).0);
-            assert_eq!(int, 2346);
+            assert_eq!(int, BigInt::from(2346));
         }
     }
 
@@ -539,9 +547,9 @@ are\a\'y\u1234o\U00031234u'",
         use self::PyExpr::*;
         for &(input, ref correct) in &[
             ("()", Tuple(vec![])),
-            ("(5, )", Tuple(vec![Integer(5)])),
-            ("(1, 2)", Tuple(vec![Integer(1), Integer(2)])),
-            ("(1, 2,)", Tuple(vec![Integer(1), Integer(2)])),
+            ("(5, )", Tuple(vec![Integer(5.into())])),
+            ("(1, 2)", Tuple(vec![Integer(1.into()), Integer(2.into())])),
+            ("(1, 2,)", Tuple(vec![Integer(1.into()), Integer(2.into())])),
         ] {
             let mut parsed = HeaderParser::parse(Rule::expr, input)
                 .unwrap_or_else(|err| panic!("failed to parse: {}", err));
@@ -555,16 +563,16 @@ are\a\'y\u1234o\U00031234u'",
         use self::PyExpr::*;
         for &(input, ref correct) in &[
             ("[]", List(vec![])),
-            ("[3]", List(vec![Integer(3)])),
-            ("[5,]", List(vec![Integer(5)])),
-            ("[1, 2]", List(vec![Integer(1), Integer(2)])),
+            ("[3]", List(vec![Integer(3.into())])),
+            ("[5,]", List(vec![Integer(5.into())])),
+            ("[1, 2]", List(vec![Integer(1.into()), Integer(2.into())])),
             (
                 "[5, 6., \"foo\", 2+7j,]",
                 List(vec![
-                    Integer(5),
+                    Integer(5.into()),
                     Float(6.),
                     String("foo".into()),
-                    Complex(2., 7.),
+                    Complex(num::Complex::new(2., 7.)),
                 ]),
             ),
         ] {
@@ -580,11 +588,14 @@ are\a\'y\u1234o\U00031234u'",
         use self::PyExpr::*;
         for &(input, ref correct) in &[
             ("{}", Dict(vec![])),
-            ("{3: \"hi\"}", Dict(vec![(Integer(3), String("hi".into()))])),
+            (
+                "{3: \"hi\"}",
+                Dict(vec![(Integer(3.into()), String("hi".into()))]),
+            ),
             (
                 "{5: 6., \"foo\" : True}",
                 Dict(vec![
-                    (Integer(5), Float(6.)),
+                    (Integer(5.into()), Float(6.)),
                     (String("foo".into()), Boolean(true)),
                 ]),
             ),
@@ -600,9 +611,9 @@ are\a\'y\u1234o\U00031234u'",
     fn parse_set_example() {
         use self::PyExpr::*;
         for &(input, ref correct) in &[
-            ("{3}", Set(vec![Integer(3)])),
-            ("{5,}", Set(vec![Integer(5)])),
-            ("{1, 2}", Set(vec![Integer(1), Integer(2)])),
+            ("{3}", Set(vec![Integer(3.into())])),
+            ("{5,}", Set(vec![Integer(5.into())])),
+            ("{1, 2}", Set(vec![Integer(1.into()), Integer(2.into())])),
         ] {
             let mut parsed = HeaderParser::parse(Rule::expr, input)
                 .unwrap_or_else(|err| panic!("failed to parse: {}", err));
@@ -625,8 +636,12 @@ are\a\'y\u1234o\U00031234u'",
             (
                 "[(1, 2, 3), (4,)]",
                 List(vec![
-                    Tuple(vec![Integer(1), Integer(2), Integer(3)]),
-                    Tuple(vec![Integer(4)]),
+                    Tuple(vec![
+                        Integer(1.into()),
+                        Integer(2.into()),
+                        Integer(3.into()),
+                    ]),
+                    Tuple(vec![Integer(4.into())]),
                 ]),
             ),
         ] {
@@ -657,23 +672,42 @@ are\a\'y\u1234o\U00031234u'",
     #[test]
     fn format_complex() {
         use self::PyExpr::*;
-        assert_eq!("1e0+3e0j", format!("{}", Complex(1., 3.)));
-        assert_eq!("1e0-3e0j", format!("{}", Complex(1., -3.)));
-        assert_eq!("-1e0+3e0j", format!("{}", Complex(-1., 3.)));
-        assert_eq!("-1e0-3e0j", format!("{}", Complex(-1., -3.)));
+        assert_eq!(
+            "1e0+3e0j",
+            format!("{}", Complex(num::Complex::new(1., 3.)))
+        );
+        assert_eq!(
+            "1e0-3e0j",
+            format!("{}", Complex(num::Complex::new(1., -3.)))
+        );
+        assert_eq!(
+            "-1e0+3e0j",
+            format!("{}", Complex(num::Complex::new(-1., 3.)))
+        );
+        assert_eq!(
+            "-1e0-3e0j",
+            format!("{}", Complex(num::Complex::new(-1., -3.)))
+        );
     }
 
     #[test]
     fn format_tuple() {
         use self::PyExpr::*;
         assert_eq!("()", format!("{}", Tuple(vec![])));
-        assert_eq!("(1,)", format!("{}", Tuple(vec![Integer(1)])));
-        assert_eq!("(1, 2)", format!("{}", Tuple(vec![Integer(1), Integer(2)])));
+        assert_eq!("(1,)", format!("{}", Tuple(vec![Integer(1.into())])));
+        assert_eq!(
+            "(1, 2)",
+            format!("{}", Tuple(vec![Integer(1.into()), Integer(2.into())]))
+        );
         assert_eq!(
             "(1, 2, 'hi')",
             format!(
                 "{}",
-                Tuple(vec![Integer(1), Integer(2), String("hi".into())])
+                Tuple(vec![
+                    Integer(1.into()),
+                    Integer(2.into()),
+                    String("hi".into()),
+                ])
             ),
         );
     }
@@ -682,13 +716,20 @@ are\a\'y\u1234o\U00031234u'",
     fn format_list() {
         use self::PyExpr::*;
         assert_eq!("[]", format!("{}", List(vec![])));
-        assert_eq!("[1]", format!("{}", List(vec![Integer(1)])));
-        assert_eq!("[1, 2]", format!("{}", List(vec![Integer(1), Integer(2)])));
+        assert_eq!("[1]", format!("{}", List(vec![Integer(1.into())])));
+        assert_eq!(
+            "[1, 2]",
+            format!("{}", List(vec![Integer(1.into()), Integer(2.into())]))
+        );
         assert_eq!(
             "[1, 2, 'hi']",
             format!(
                 "{}",
-                List(vec![Integer(1), Integer(2), String("hi".into())])
+                List(vec![
+                    Integer(1.into()),
+                    Integer(2.into()),
+                    String("hi".into()),
+                ])
             ),
         );
     }
@@ -699,14 +740,14 @@ are\a\'y\u1234o\U00031234u'",
         assert_eq!("{}", format!("{}", Dict(vec![])));
         assert_eq!(
             "{1: 2}",
-            format!("{}", Dict(vec![(Integer(1), Integer(2))]))
+            format!("{}", Dict(vec![(Integer(1.into()), Integer(2.into()))]))
         );
         assert_eq!(
             "{1: 2, 'foo': 'bar'}",
             format!(
                 "{}",
                 Dict(vec![
-                    (Integer(1), Integer(2)),
+                    (Integer(1.into()), Integer(2.into())),
                     (String("foo".into()), String("bar".into())),
                 ])
             ),
@@ -723,11 +764,21 @@ are\a\'y\u1234o\U00031234u'",
     #[test]
     fn format_set() {
         use self::PyExpr::*;
-        assert_eq!("{1}", format!("{}", Set(vec![Integer(1)])));
-        assert_eq!("{1, 2}", format!("{}", Set(vec![Integer(1), Integer(2)])));
+        assert_eq!("{1}", format!("{}", Set(vec![Integer(1.into())])));
+        assert_eq!(
+            "{1, 2}",
+            format!("{}", Set(vec![Integer(1.into()), Integer(2.into())]))
+        );
         assert_eq!(
             "{1, 2, 'hi'}",
-            format!("{}", Set(vec![Integer(1), Integer(2), String("hi".into())])),
+            format!(
+                "{}",
+                Set(vec![
+                    Integer(1.into()),
+                    Integer(2.into()),
+                    String("hi".into()),
+                ])
+            ),
         );
     }
 
@@ -739,8 +790,14 @@ are\a\'y\u1234o\U00031234u'",
             format!(
                 "{}",
                 Dict(vec![
-                    (String("foo".into()), List(vec![Integer(1), Boolean(true)])),
-                    (Set(vec![Complex(2., 3.)]), Integer(4)),
+                    (
+                        String("foo".into()),
+                        List(vec![Integer(1.into()), Boolean(true)]),
+                    ),
+                    (
+                        Set(vec![Complex(num::Complex::new(2., 3.))]),
+                        Integer(4.into()),
+                    ),
                 ])
             ),
         );

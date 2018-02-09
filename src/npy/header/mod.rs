@@ -5,6 +5,7 @@ mod py_expr;
 pub use self::py_expr::PyExpr;
 
 use byteorder::{ByteOrder, LittleEndian};
+use num::ToPrimitive;
 use pest::Parser;
 use pest::iterators::Pair;
 use std::error::Error;
@@ -65,6 +66,10 @@ quick_error! {
             description("illegal escape sequence in string or bytes")
             display(x) -> ("{}: {}", x.description(), msg)
         }
+        NumericCast(old: String, new_type: String) {
+            description("error casting number")
+            display(x) -> ("{}: {} to {}", x.description(), old, new_type)
+        }
     }
 }
 
@@ -111,8 +116,10 @@ fn parse_header(h: Pair<Rule>) -> Result<Header, HeaderParseError> {
                 if let PyExpr::Tuple(ref tuple) = value {
                     let mut out = Vec::with_capacity(tuple.len());
                     for elem in tuple {
-                        if let &PyExpr::Integer(int) = elem {
-                            out.push(int as usize);
+                        if let &PyExpr::Integer(ref int) = elem {
+                            out.push(int.to_usize().ok_or_else(|| {
+                                HeaderParseError::IllegalValue("shape".to_owned(), value.clone())
+                            })?);
                         } else {
                             return Err(HeaderParseError::IllegalValue(
                                 "shape".to_owned(),
@@ -278,7 +285,7 @@ impl Header {
                 PyExpr::Tuple(
                     self.shape
                         .iter()
-                        .map(|&elem| PyExpr::Integer(elem as i64))
+                        .map(|&elem| PyExpr::Integer(elem.into()))
                         .collect(),
                 ),
             ),
