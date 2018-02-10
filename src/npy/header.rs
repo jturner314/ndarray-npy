@@ -1,6 +1,6 @@
 use byteorder::{ByteOrder, LittleEndian};
 use num::ToPrimitive;
-use py_literal::{ParseError as PyValueParseError, Value as PyValue};
+use py_literal::{ParseError as PyValueParseError, FormatError as PyValueFormatError, Value as PyValue};
 use std::error::Error;
 use std::fmt;
 use std::io;
@@ -153,8 +153,8 @@ pub struct Header {
 quick_error! {
     #[derive(Debug)]
     pub enum FormatHeaderError {
-        Format(err: fmt::Error) {
-            description("error formatting header; this is most likely due to a zero-size set")
+        PyValue(err: PyValueFormatError) {
+            description("error formatting Python value")
             display(x) -> ("{}", x.description())
             cause(err)
             from()
@@ -287,8 +287,8 @@ impl Header {
 
     pub fn to_bytes(&self) -> Result<Vec<u8>, FormatHeaderError> {
         // Metadata describing array's format as ASCII string.
-        let mut arr_format = String::new();
-        fmt::write(&mut arr_format, format_args!("{}", self))?;
+        let mut arr_format = Vec::new();
+        self.to_py_value().write_ascii(&mut arr_format)?;
 
         // Length of a '\n' char in bytes.
         const NEWLINE_LEN: usize = 1;
@@ -305,10 +305,10 @@ impl Header {
 
         // Add padding spaces to make total header length divisible by 16.
         for _ in 0..(16 - (prefix_len + arr_format.len() + NEWLINE_LEN) % 16) {
-            arr_format.push(' ');
+            arr_format.push(b' ');
         }
         // Add final newline.
-        arr_format.push('\n');
+        arr_format.push(b'\n');
 
         // Determine length of header.
         let header_len = arr_format.len();
@@ -318,7 +318,7 @@ impl Header {
         out.push(version.major_version());
         out.push(version.minor_version());
         out.extend_from_slice(&version.format_header_len(header_len));
-        out.extend_from_slice(arr_format.as_bytes());
+        out.extend_from_slice(&arr_format);
 
         // Verify that length of header is divisible by 16.
         debug_assert_eq!(out.len() % 16, 0);
