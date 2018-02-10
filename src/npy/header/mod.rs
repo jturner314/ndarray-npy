@@ -1,28 +1,13 @@
-#[macro_use]
-mod parse_macros;
-mod py_expr;
-
-pub use self::py_expr::PyExpr;
-
 use byteorder::{ByteOrder, LittleEndian};
 use num::ToPrimitive;
-use pest::Parser;
-use pest::iterators::Pair;
+use py_literal::{ParseError as PyValueParseError, Value as PyValue};
 use std::error::Error;
 use std::fmt;
 use std::io;
-use std::num::ParseIntError;
 use super::ReadNpyError;
 
 /// Magic string to indicate npy format.
 const MAGIC_STRING: &[u8] = b"\x93NUMPY";
-
-#[cfg(debug_assertions)]
-const _GRAMMAR: &'static str = include_str!("header.pest");
-
-#[derive(Parser)]
-#[grammar = "npy/header/header.pest"]
-struct HeaderParser;
 
 quick_error! {
     #[derive(Debug)]
@@ -40,17 +25,7 @@ quick_error! {
             display(x) -> ("{}", x.description())
             from(::std::str::Utf8Error)
         }
-        Pest(msg: String) {
-            description("dict parse error")
-            display(x) -> ("{}: {}", x.description(), msg)
-        }
-        ParseInt(err: ParseIntError) {
-            description("integer parsing error")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
-            from()
-        }
-        UnknownKey(key: PyExpr) {
+        UnknownKey(key: PyValue) {
             description("unknown key")
             display(x) -> ("{}: {}", x.description(), key)
         }
@@ -58,17 +33,23 @@ quick_error! {
             description("missing key")
             display(x) -> ("{}: {}", x.description(), key)
         }
-        IllegalValue(key: String, value: PyExpr) {
+        IllegalValue(key: String, value: PyValue) {
             description("illegal value for key")
             display(x) -> ("{} {}: {}", x.description(), key, value)
         }
-        IllegalEscapeSequence(msg: String) {
-            description("illegal escape sequence in string or bytes")
-            display(x) -> ("{}: {}", x.description(), msg)
+        DictParse(err: PyValueParseError){
+            description("error parsing metadata dict")
+            display(x) -> ("{}: {}", x.description(), err)
+            cause(err)
+            from()
         }
-        NumericCast(old: String, new_type: String) {
-            description("error casting number")
-            display(x) -> ("{}: {} to {}", x.description(), old, new_type)
+        MetaNotDict(value: PyValue) {
+            description("metadata is not a dict")
+            display(x) -> ("{}: {}", x.description(), value)
+        }
+        MissingNewline {
+            description("newline missing at end of header")
+            display(x) -> ("{}", x.description())
         }
     }
 }
@@ -88,62 +69,6 @@ quick_error! {
             cause(err)
             from()
         }
-    }
-}
-
-fn parse_header(h: Pair<Rule>) -> Result<Header, HeaderParseError> {
-    debug_assert_eq!(h.as_rule(), Rule::header);
-    let (dict,) = parse_pairs_as!(h.into_inner(), (Rule::dict,));
-    let mut type_descriptor: Option<PyExpr> = None;
-    let mut fortran_order: Option<bool> = None;
-    let mut shape: Option<Vec<usize>> = None;
-    for (key, value) in py_expr::parse_dict(dict)? {
-        match key {
-            PyExpr::String(ref k) if k == "descr" => {
-                type_descriptor = Some(value);
-            }
-            PyExpr::String(ref k) if k == "fortran_order" => {
-                if let PyExpr::Boolean(b) = value {
-                    fortran_order = Some(b);
-                } else {
-                    return Err(HeaderParseError::IllegalValue(
-                        "fortran_order".to_owned(),
-                        value,
-                    ));
-                }
-            }
-            PyExpr::String(ref k) if k == "shape" => {
-                if let PyExpr::Tuple(ref tuple) = value {
-                    let mut out = Vec::with_capacity(tuple.len());
-                    for elem in tuple {
-                        if let &PyExpr::Integer(ref int) = elem {
-                            out.push(int.to_usize().ok_or_else(|| {
-                                HeaderParseError::IllegalValue("shape".to_owned(), value.clone())
-                            })?);
-                        } else {
-                            return Err(HeaderParseError::IllegalValue(
-                                "shape".to_owned(),
-                                value.clone(),
-                            ));
-                        }
-                    }
-                    shape = Some(out);
-                } else {
-                    return Err(HeaderParseError::IllegalValue("shape".to_owned(), value));
-                }
-            }
-            k => return Err(HeaderParseError::UnknownKey(k)),
-        }
-    }
-    match (type_descriptor, fortran_order, shape) {
-        (Some(type_descriptor), Some(fortran_order), Some(shape)) => Ok(Header {
-            type_descriptor: type_descriptor,
-            fortran_order: fortran_order,
-            shape: shape,
-        }),
-        (None, _, _) => Err(HeaderParseError::MissingKey("descr".to_owned())),
-        (_, None, _) => Err(HeaderParseError::MissingKey("fortran_order".to_owned())),
-        (_, _, None) => Err(HeaderParseError::MissingKey("shaper".to_owned())),
     }
 }
 
@@ -220,7 +145,7 @@ impl Version {
 
 #[derive(Clone, Debug)]
 pub struct Header {
-    pub type_descriptor: PyExpr,
+    pub type_descriptor: PyValue,
     pub fortran_order: bool,
     pub shape: Vec<usize>,
 }
@@ -239,11 +164,72 @@ quick_error! {
 
 impl fmt::Display for Header {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.to_py_expr())
+        write!(f, "{}", self.to_py_value())
     }
 }
 
 impl Header {
+    fn from_py_value(value: PyValue) -> Result<Self, HeaderParseError> {
+        if let PyValue::Dict(dict) = value {
+            let mut type_descriptor: Option<PyValue> = None;
+            let mut fortran_order: Option<bool> = None;
+            let mut shape: Option<Vec<usize>> = None;
+            for (key, val) in dict {
+                match key {
+                    PyValue::String(ref k) if k == "descr" => {
+                        type_descriptor = Some(val);
+                    }
+                    PyValue::String(ref k) if k == "fortran_order" => {
+                        if let PyValue::Boolean(b) = val {
+                            fortran_order = Some(b);
+                        } else {
+                            return Err(HeaderParseError::IllegalValue(
+                                "fortran_order".to_owned(),
+                                val,
+                            ));
+                        }
+                    }
+                    PyValue::String(ref k) if k == "shape" => {
+                        if let PyValue::Tuple(ref tuple) = val {
+                            let mut out = Vec::with_capacity(tuple.len());
+                            for elem in tuple {
+                                if let &PyValue::Integer(ref int) = elem {
+                                    out.push(int.to_usize().ok_or_else(|| {
+                                        HeaderParseError::IllegalValue(
+                                            "shape".to_owned(),
+                                            val.clone(),
+                                        )
+                                    })?);
+                                } else {
+                                    return Err(HeaderParseError::IllegalValue(
+                                        "shape".to_owned(),
+                                        val.clone(),
+                                    ));
+                                }
+                            }
+                            shape = Some(out);
+                        } else {
+                            return Err(HeaderParseError::IllegalValue("shape".to_owned(), val));
+                        }
+                    }
+                    k => return Err(HeaderParseError::UnknownKey(k)),
+                }
+            }
+            match (type_descriptor, fortran_order, shape) {
+                (Some(type_descriptor), Some(fortran_order), Some(shape)) => Ok(Header {
+                    type_descriptor: type_descriptor,
+                    fortran_order: fortran_order,
+                    shape: shape,
+                }),
+                (None, _, _) => Err(HeaderParseError::MissingKey("descr".to_owned())),
+                (_, None, _) => Err(HeaderParseError::MissingKey("fortran_order".to_owned())),
+                (_, _, None) => Err(HeaderParseError::MissingKey("shaper".to_owned())),
+            }
+        } else {
+            Err(HeaderParseError::MetaNotDict(value))
+        }
+    }
+
     pub fn from_reader<R: io::Read>(mut reader: R) -> Result<Self, ReadNpyError> {
         // Check for magic string.
         let mut buf = vec![0; MAGIC_STRING.len()];
@@ -263,29 +249,36 @@ impl Header {
         // Parse the dictionary describing the array's format.
         let mut buf = vec![0; header_len];
         reader.read_exact(&mut buf)?;
-        let header_str = ::std::str::from_utf8(&buf).map_err(|err| HeaderParseError::from(err))?;
-        if !header_str.is_ascii() {
+        let without_newline = match buf.split_last() {
+            Some((&b'\n', rest)) => rest,
+            Some(_) | None => Err(HeaderParseError::MissingNewline)?,
+        };
+        let header_str = if without_newline.is_ascii() {
+            unsafe { ::std::str::from_utf8_unchecked(without_newline) }
+        } else {
             return Err(HeaderParseError::NonAscii)?;
-        }
-        let mut parsed = HeaderParser::parse(Rule::header, header_str)
-            .map_err(|e| HeaderParseError::Pest(format!("{}", e)))?;
-        let (header,) = parse_pairs_as!(parsed, (Rule::header,));
-        Ok(parse_header(header)?)
+        };
+        Ok(Header::from_py_value(header_str
+            .parse()
+            .map_err(|err| HeaderParseError::from(err))?)?)
     }
 
-    fn to_py_expr(&self) -> PyExpr {
-        PyExpr::Dict(vec![
-            (PyExpr::String("descr".into()), self.type_descriptor.clone()),
+    fn to_py_value(&self) -> PyValue {
+        PyValue::Dict(vec![
             (
-                PyExpr::String("fortran_order".into()),
-                PyExpr::Boolean(self.fortran_order),
+                PyValue::String("descr".into()),
+                self.type_descriptor.clone(),
             ),
             (
-                PyExpr::String("shape".into()),
-                PyExpr::Tuple(
+                PyValue::String("fortran_order".into()),
+                PyValue::Boolean(self.fortran_order),
+            ),
+            (
+                PyValue::String("shape".into()),
+                PyValue::Tuple(
                     self.shape
                         .iter()
-                        .map(|&elem| PyExpr::Integer(elem.into()))
+                        .map(|&elem| PyValue::Integer(elem.into()))
                         .collect(),
                 ),
             ),

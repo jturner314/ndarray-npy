@@ -3,17 +3,18 @@ pub mod header;
 use byteorder::{self, ByteOrder};
 use ndarray::{Data, DataOwned, ShapeError};
 use ndarray::prelude::*;
+use py_literal::Value as PyValue;
 use std::error::Error;
 use std::io;
 use std::mem;
-use self::header::{FormatHeaderError, Header, HeaderParseError, PyExpr};
+use self::header::{FormatHeaderError, Header, HeaderParseError};
 
 /// An array element type that can be written to an `.npy` or `.npz` file.
 pub unsafe trait WritableElement: Sized {
     type Error: 'static + Error + Send + Sync;
 
     /// Returns a descriptor of the type that can be used in the header.
-    fn type_descriptor() -> PyExpr;
+    fn type_descriptor() -> PyValue;
 
     /// Writes a single instance of `Self` to the writer.
     fn write<W: io::Write>(&self, writer: W) -> Result<(), Self::Error>;
@@ -120,7 +121,7 @@ pub trait ReadableElement: Sized {
     /// Checks `type_desc` and reads a `Vec` of length `len` from `reader`.
     fn read_vec<R: io::Read>(
         reader: R,
-        type_desc: &PyExpr,
+        type_desc: &PyValue,
         len: usize,
     ) -> Result<Vec<Self>, Self::Error>;
 }
@@ -233,11 +234,11 @@ macro_rules! impl_writable_primitive {
         unsafe impl WritableElement for $elem {
             type Error = io::Error;
 
-            fn type_descriptor() -> PyExpr {
+            fn type_descriptor() -> PyValue {
                 if cfg!(target_endian = "little") {
-                    $little_desc.into()
+                    PyValue::String($little_desc.into())
                 } else if cfg!(target_endian = "big") {
-                    $big_desc.into()
+                    PyValue::String($big_desc.into())
                 } else {
                     unreachable!()
                 }
@@ -275,7 +276,7 @@ macro_rules! impl_writable_primitive {
 quick_error! {
     #[derive(Debug)]
     pub enum ReadPrimitiveError {
-        BadDescriptor(desc: PyExpr) {
+        BadDescriptor(desc: PyValue) {
             description("bad descriptor for this type")
             display(x) -> ("{}: {}", x.description(), desc)
         }
@@ -293,11 +294,11 @@ macro_rules! impl_readable_primitive {
         impl ReadableElement for $elem {
             type Error = ReadPrimitiveError;
 
-            fn read_vec<R: io::Read>(mut reader: R, type_desc: &PyExpr, len: usize)
+            fn read_vec<R: io::Read>(mut reader: R, type_desc: &PyValue, len: usize)
                                      -> Result<Vec<Self>, Self::Error>
             {
                 match *type_desc {
-                    PyExpr::String(ref s) if s == $native_desc => {
+                    PyValue::String(ref s) if s == $native_desc => {
                         // Function to ensure lifetime of bytes slice is correct.
                         fn cast_slice(slice: &mut [$elem]) -> &mut [u8] {
                             unsafe {
@@ -311,7 +312,7 @@ macro_rules! impl_readable_primitive {
                         reader.read_exact(cast_slice(&mut out))?;
                         Ok(out)
                     }
-                    PyExpr::String(ref s) if s == $other_desc => {
+                    PyValue::String(ref s) if s == $other_desc => {
                         let mut bytes = vec![0; len * mem::size_of::<$elem>()];
                         reader.read_exact(&mut bytes)?;
                         let mut out = vec![$zero; len];
@@ -344,11 +345,11 @@ impl ReadableElement for i8 {
 
     fn read_vec<R: io::Read>(
         mut reader: R,
-        type_desc: &PyExpr,
+        type_desc: &PyValue,
         len: usize,
     ) -> Result<Vec<Self>, Self::Error> {
         match *type_desc {
-            PyExpr::String(ref s) if s == "|i1" || s == "i1" || s == "b" => {
+            PyValue::String(ref s) if s == "|i1" || s == "i1" || s == "b" => {
                 // Function to ensure lifetime of bytes slice is correct.
                 fn cast_slice(slice: &mut [i8]) -> &mut [u8] {
                     unsafe {
@@ -369,11 +370,11 @@ impl ReadableElement for u8 {
 
     fn read_vec<R: io::Read>(
         mut reader: R,
-        type_desc: &PyExpr,
+        type_desc: &PyValue,
         len: usize,
     ) -> Result<Vec<Self>, Self::Error> {
         match *type_desc {
-            PyExpr::String(ref s) if s == "|u1" || s == "u1" || s == "B" => {
+            PyValue::String(ref s) if s == "|u1" || s == "u1" || s == "B" => {
                 let mut out = vec![0; len];
                 reader.read_exact(&mut out)?;
                 Ok(out)
