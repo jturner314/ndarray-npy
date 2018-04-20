@@ -10,6 +10,19 @@ information.
 [`.npy`]: https://docs.scipy.org/doc/numpy/neps/npy-format.html
 [`.npz`]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.savez.html
 
+**This crate is a work-in-progress.** It currently supports only a subset of
+`.npy` header descriptors and supports only primitive numeric types as the
+array element type. You can implement `ReadableElement` and `WritableElement`
+for your own types, but the next breaking release of this library will probably
+change those traits.
+
+Future plans include support for:
+
+* Memory-mapped files.
+* More element types (e.g. structs). If you need support for structs before
+  this is implemented in `ndarray-npy`, check out the [`npy`
+  crate](https://crates.io/crates/npy).
+
 ## License
 
 Copyright 2018 Jim Turner
