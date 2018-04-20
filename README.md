@@ -23,6 +23,11 @@ Future plans include support for:
   this is implemented in `ndarray-npy`, check out the [`npy`
   crate](https://crates.io/crates/npy).
 
+## Contributing
+
+Please feel free to create issues and submit PRs. PRs adding more tests would
+be especially appreciated.
+
 ## License
 
 Copyright 2018 Jim Turner
