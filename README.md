@@ -20,8 +20,10 @@ Future plans include support for:
 
 * Memory-mapped files.
 * More element types (e.g. structs). If you need support for structs before
-  this is implemented in `ndarray-npy`, check out the [`npy`
-  crate](https://crates.io/crates/npy).
+  this is implemented in `ndarray-npy`, check out the [`npy` crate].
+* Possibly merging this with the [`npy` crate].
+
+[`npy` crate]: https://crates.io/crates/npy
 
 ## Contributing
 
