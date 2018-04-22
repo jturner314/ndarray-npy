@@ -25,6 +25,41 @@ Future plans include support for:
 
 [`npy` crate]: https://crates.io/crates/npy
 
+## Using with Cargo
+
+To use with the default features:
+
+```toml
+[dependencies]
+ndarray-npy = "0.1"
+```
+
+To use without the default features:
+
+```toml
+[dependencies]
+ndarray-npy = { version = "0.1", default-features = false }
+```
+
+There are two optional features that are enabled by default:
+
+* `npz` enables support for `.npz` files, which requires a dependency on the
+  [`zip` crate].
+* `compressed_npz` enables support for compressed `.npz` files, which requires
+  a dependency on the [`zip` crate] and also pulls in the necessary
+  dependencies for the `zip` crate's `deflate` feature.
+
+For example, you can use just the `npz` feature:
+
+```toml
+[dependencies.ndarray-npy]
+version = "0.1"
+default-features = false
+features = ["npz"]
+```
+
+[`zip` crate]: https://crates.io/crates/zip
+
 ## Contributing
 
 Please feel free to create issues and submit PRs. PRs adding more tests would
