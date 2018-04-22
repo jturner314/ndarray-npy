@@ -1,7 +1,7 @@
 //! This crate provides methods to read/write [`ndarray`]'s `ArrayBase` type
 //! from/to [`.npy`] and [`.npz`] files.
 //!
-//! [`ndarray`]: https://github.com/bluss/rust-ndarray
+//! [`ndarray`]: https://github.com/bluss/ndarray
 //! [`.npy`]: https://docs.scipy.org/doc/numpy/neps/npy-format.html
 //! [`.npz`]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.savez.html
 //!
