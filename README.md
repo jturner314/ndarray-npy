@@ -1,10 +1,13 @@
 # ndarray-npy
 
-[![Build Status](https://travis-ci.org/jturner314/ndarray-npy.svg?branch=master)](https://travis-ci.org/jturner314/ndarray-npy)
+[![Build status](https://travis-ci.org/jturner314/ndarray-npy.svg?branch=master)](https://travis-ci.org/jturner314/ndarray-npy)
+[![Dependencies status](https://deps.rs/repo/github/jturner314/ndarray-npy/status.svg)](https://deps.rs/repo/github/jturner314/ndarray-npy)
+[![Crate](https://img.shields.io/crates/v/ndarray-npy.svg)](https://crates.io/crates/ndarray-npy)
+[![Documentation](https://docs.rs/ndarray-npy/badge.svg)](https://docs.rs/ndarray-npy)
 
 This crate provides support for reading/writing [`ndarray`]'s `ArrayBase` type
-from/to [`.npy`] and [`.npz`] files. See [`src/lib.rs`](src/lib.rs) for more
-information.
+from/to [`.npy`] and [`.npz`] files. See the
+[documentation](https://docs.rs/ndarray-npy) for more information.
 
 [`ndarray`]: https://github.com/bluss/rust-ndarray
 [`.npy`]: https://docs.scipy.org/doc/numpy/neps/npy-format.html
