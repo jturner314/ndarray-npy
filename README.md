@@ -65,6 +65,11 @@ features = ["npz"]
 
 ## Releases
 
+* **0.1.2** (not yet released)
+
+  * Changed the `compressed_npz` feature to automatically include the `npz`
+    feature.
+
 * **0.1.1**
 
   * Improved crate documentation (no functional changes).
