@@ -63,6 +63,16 @@ features = ["npz"]
 
 [`zip` crate]: https://crates.io/crates/zip
 
+## Releases
+
+* **0.1.1**
+
+  * Improved crate documentation (no functional changes).
+
+* **0.1.0**
+
+  * Initial release.
+
 ## Contributing
 
 Please feel free to create issues and submit PRs. PRs adding more tests would
