@@ -16,7 +16,7 @@ travis-ci = { repository = "jturner314/ndarray-npy", branch = "master" }
 byteorder = "1.2"
 ndarray = "0.11"
 num = "0.1"
-py_literal = { git = "https://github.com/jturner314/py_literal.git", branch = "master" }
+py_literal = "0.1"
 quick-error = "1.2"
 zip = { version = "0.3", default-features = false, optional = true }
 
