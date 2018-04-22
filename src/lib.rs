@@ -15,6 +15,11 @@
 //! [`NpzReader`]: struct.NpzReader.html
 //! [`NpzWriter`]: struct.NpzWriter.html
 //!
+//! See the [repository] for information about the default features and how to
+//! use this crate with Cargo.
+//!
+//! [repository]: https://github.com/jturner314/ndarray-npy
+//!
 //! # Limitations
 //!
 //! * Parsing of `.npy` files is currently limited to files where the `descr`
