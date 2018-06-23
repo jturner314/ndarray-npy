@@ -71,7 +71,7 @@ default-features = false
 features = ["npz"]
 ```
 
-You can use the `npz_compressed` feature with a non-default `flate2` backend.
+You can use the `compressed_npz` feature with a non-default `flate2` backend.
 Note that the version of `flate2` must match the version of `flate2` used by
 the `zip` crate for this to work. This example shows selecting the `zlib`
 backend:
@@ -129,6 +129,7 @@ backend if they use `default-features = false` with your crate.
 * **0.2.0** (not yet released)
 
   * Updated to `zip` 0.4.
+  * Made the compression backend for compressed `.npz` files user-selectable.
   * Reworked how feature selection works. This should only affect you if you
     use `default-features = false, features = ["compressed_npz"]`.
 
