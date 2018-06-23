@@ -126,7 +126,7 @@ backend if they use `default-features = false` with your crate.
 
 ## Releases
 
-* **0.2.0** (not yet released)
+* **0.2.0**
 
   * Updated to `zip` 0.4.
   * Made the compression backend for compressed `.npz` files user-selectable.
