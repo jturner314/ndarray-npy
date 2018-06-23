@@ -18,9 +18,10 @@ ndarray = "0.11"
 num = "0.1"
 py_literal = "0.1"
 quick-error = "1.2"
-zip = { version = "0.3", default-features = false, optional = true }
+zip = { version = "0.4", default-features = false, optional = true }
 
 [features]
-default = ["npz", "compressed_npz"]
+default = ["compressed_npz_default"]
 npz = ["zip"]
-compressed_npz = ["npz", "zip/deflate"]
+compressed_npz = ["npz", "zip/flate2"]
+compressed_npz_default = ["compressed_npz", "zip/deflate"]

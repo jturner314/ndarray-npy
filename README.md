@@ -38,6 +38,11 @@ To use with the default features:
 ndarray-npy = "0.1"
 ```
 
+The `default` feature set includes the `compressed_npz_default` feature, which
+enables support for uncompresssed and compressed `.npz` files with the default
+compression backend. This requires a dependency on the [`zip` crate] and
+[`flate2` crate].
+
 To use without the default features:
 
 ```toml
@@ -45,13 +50,17 @@ To use without the default features:
 ndarray-npy = { version = "0.1", default-features = false }
 ```
 
-There are two optional features that are enabled by default:
+With `default-features = false`, `ndarray-npy` provides support only for `.npy`
+files, not `.npz` files. If you want `.npz` file support, you can select
+additional features:
 
-* `npz` enables support for `.npz` files, which requires a dependency on the
-  [`zip` crate].
-* `compressed_npz` enables support for compressed `.npz` files, which requires
-  a dependency on the [`zip` crate] and also pulls in the necessary
-  dependencies for the `zip` crate's `deflate` feature.
+* `npz` enables support for uncompressed `.npz` files. This requires a
+  dependency on the [`zip` crate].
+* `compressed_npz` enables support for uncompressed and compressed `.npz` files
+  without selecting a `flate2` backend. This requires a dependency on the
+  [`zip` crate] and [`flate2` crate]. If you use `default-features = false` and
+  enable the `compressed_npz` feature, you must select a `flate2` backend (see
+  example below).
 
 For example, you can use just the `npz` feature:
 
@@ -62,14 +71,66 @@ default-features = false
 features = ["npz"]
 ```
 
+You can use the `npz_compressed` feature with a non-default `flate2` backend.
+Note that the version of `flate2` must match the version of `flate2` used by
+the `zip` crate for this to work. This example shows selecting the `zlib`
+backend:
+
+```toml
+[dependencies.ndarray-npy]
+version = "0.1"
+default-features = false
+features = ["compressed_npz"]
+
+[dependencies.flate2]
+version = "1.0"
+default-features = false
+features = ["zlib"]
+```
+
 [`zip` crate]: https://crates.io/crates/zip
+[`flate2` crate]: https://crates.io/crates/flate2
+
+### Library authors
+
+Library authors should specify their dependency on `ndarray-npy` like this:
+
+```toml
+[dependencies.ndarray-npy]
+version = "0.1"
+default-features = false
+features = [FEATURES_LIST_HERE]
+```
+
+where the `features` list is one of the following:
+
+* `[]` if your crate does not depend on `.npz` file support
+* `["npz"]` if your crate depends on `.npz` file support but not compression
+* `["compressed_npz"]` if your crate depends on `.npz` file support with compression
+
+Ideally, do not include a *required* dependency on the `default` feature set or
+the `compressed_npz_default` feature, so that the user can select their desired
+`flate2` backend.
+
+If your crate depends on the `compressed_npz` feature, it may be a good idea to
+simplify use with the following:
+
+```toml
+[features]
+default = ["ndarray-npy/compressed_npz_default"]
+```
+
+so that the user does not have to manually select a `flate2` backend if they
+use your crate's default feature set. This still enables the user to select a
+backend if they use `default-features = false` with your crate.
 
 ## Releases
 
-* **0.1.2** (not yet released)
+* **0.2.0** (not yet released)
 
-  * Changed the `compressed_npz` feature to automatically include the `npz`
-    feature.
+  * Updated to `zip` 0.4.
+  * Reworked how feature selection works. This should only affect you if you
+    use `default-features = false, features = ["compressed_npz"]`.
 
 * **0.1.1**
 
