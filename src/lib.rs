@@ -36,7 +36,7 @@
 
 extern crate byteorder;
 extern crate ndarray;
-extern crate num;
+extern crate num_traits;
 extern crate py_literal;
 #[macro_use]
 extern crate quick_error;
