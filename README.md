@@ -126,6 +126,12 @@ backend if they use `default-features = false` with your crate.
 
 ## Releases
 
+* **0.3.0** (not yet released)
+
+  * Updated to `ndarray` 0.12.
+  * Updated to `num-traits` 0.2 (replacing dependency on `num`).
+  * Updated to `py_literal` 0.2.
+
 * **0.2.0**
 
   * Updated to `zip` 0.4.
