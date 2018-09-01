@@ -126,7 +126,7 @@ backend if they use `default-features = false` with your crate.
 
 ## Releases
 
-* **0.3.0** (not yet released)
+* **0.3.0**
 
   * Updated to `ndarray` 0.12.
   * Updated to `num-traits` 0.2 (replacing dependency on `num`).
