@@ -1,5 +1,5 @@
 use byteorder::{ByteOrder, LittleEndian};
-use num::ToPrimitive;
+use num_traits::ToPrimitive;
 use py_literal::{ParseError as PyValueParseError, FormatError as PyValueFormatError, Value as PyValue};
 use std::error::Error;
 use std::fmt;
