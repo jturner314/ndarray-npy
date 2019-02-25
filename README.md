@@ -89,6 +89,16 @@ where the `features` list is one of the following:
 
 ## Releases
 
+* **0.4.0** (not yet released)
+
+  * Added support for reading/writing arrays of `bool`, by @tobni and
+    @jturner314.
+  * Updated to `zip` 0.5.
+  * Updated to Rust 1.32.
+  * Renamed the `compressed_npz_default` feature to `compressed_npz` because
+    the `zip` crate no longer allows the user to select the compression
+    backend.
+
 * **0.3.0**
 
   * Updated to `ndarray` 0.12.
