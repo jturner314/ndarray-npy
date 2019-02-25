@@ -447,8 +447,8 @@ impl_primitive_multibyte!(u16, "<u2", ">u2", 0, read_u16_into);
 impl_primitive_multibyte!(u32, "<u4", ">u4", 0, read_u32_into);
 impl_primitive_multibyte!(u64, "<u8", ">u8", 0, read_u64_into);
 
-impl_primitive_multibyte!(f32, "<f4", ">f4", 0., read_f32_into_unchecked);
-impl_primitive_multibyte!(f64, "<f8", ">f8", 0., read_f64_into_unchecked);
+impl_primitive_multibyte!(f32, "<f4", ">f4", 0., read_f32_into);
+impl_primitive_multibyte!(f64, "<f8", ">f8", 0., read_f64_into);
 
 #[cfg(test)]
 mod test {
