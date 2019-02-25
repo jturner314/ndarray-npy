@@ -35,7 +35,7 @@ To use with the default features:
 
 ```toml
 [dependencies]
-ndarray-npy = "0.3"
+ndarray-npy = "0.4"
 ```
 
 The `default` feature set includes the `compressed_npz` feature, which enables
@@ -46,7 +46,7 @@ To use without the default features:
 
 ```toml
 [dependencies]
-ndarray-npy = { version = "0.3", default-features = false }
+ndarray-npy = { version = "0.4", default-features = false }
 ```
 
 With `default-features = false`, `ndarray-npy` provides support only for `.npy`
@@ -63,7 +63,7 @@ For example, you can use just the `npz` feature:
 
 ```toml
 [dependencies.ndarray-npy]
-version = "0.3"
+version = "0.4"
 default-features = false
 features = ["npz"]
 ```
@@ -76,7 +76,7 @@ Library authors should specify their dependency on `ndarray-npy` like this:
 
 ```toml
 [dependencies.ndarray-npy]
-version = "0.3"
+version = "0.4"
 default-features = false
 features = [FEATURES_LIST_HERE]
 ```
@@ -89,7 +89,7 @@ where the `features` list is one of the following:
 
 ## Releases
 
-* **0.4.0** (not yet released)
+* **0.4.0**
 
   * Added support for reading/writing arrays of `bool`, by @tobni and
     @jturner314.
