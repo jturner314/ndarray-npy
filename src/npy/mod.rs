@@ -449,3 +449,28 @@ impl_primitive_multibyte!(u64, "<u8", ">u8", 0, read_u64_into);
 
 impl_primitive_multibyte!(f32, "<f4", ">f4", 0., read_f32_into_unchecked);
 impl_primitive_multibyte!(f64, "<f8", ">f8", 0., read_f64_into_unchecked);
+
+#[cfg(test)]
+mod test {
+    use super::{ReadableElement, ReadPrimitiveError};
+    use py_literal::Value as PyValue;
+    use std::io::Cursor;
+
+    #[test]
+    fn read_bool() {
+        let data = &[0x00, 0x01, 0x00, 0x00, 0x01];
+        let type_desc = PyValue::String(String::from("|b1"));
+        let out = <bool>::read_vec(Cursor::new(data), &type_desc, data.len()).unwrap();
+        assert_eq!(out, vec![false, true, false, false, true]);
+    }
+
+    #[test]
+    fn read_bool_bad_value() {
+        let data = &[0x00, 0x01, 0x05, 0x00, 0x01];
+        let type_desc = PyValue::String(String::from("|b1"));
+        match <bool>::read_vec(Cursor::new(data), &type_desc, data.len()) {
+            Err(ReadPrimitiveError::BadValue) => {}
+            _ => panic!(),
+        }
+    }
+}
