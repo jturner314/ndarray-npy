@@ -50,3 +50,20 @@ fn read_f64_fortran() {
     let arr = Array3::<f64>::read_npy(reader).unwrap();
     assert_eq!(correct, arr);
 }
+
+#[test]
+fn read_bool() {
+    let mut correct = Array3::from_elem((2, 3, 4), false);
+    for (i, elem) in correct.iter_mut().enumerate() {
+        *elem = (i % 5) % 2 == 0;
+    }
+    let reader = Cursor::new(&include_bytes!("example_bool.npy")[..]);
+    let arr = Array3::<bool>::read_npy(reader).unwrap();
+    assert_eq!(correct, arr);
+}
+
+#[test]
+fn read_bool_bad_value() {
+    let reader = Cursor::new(&include_bytes!("example_bool_bad_value.npy")[..]);
+    assert!(Array3::<bool>::read_npy(reader).is_err());
+}

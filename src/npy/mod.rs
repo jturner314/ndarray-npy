@@ -280,6 +280,9 @@ quick_error! {
             description("bad descriptor for this type")
             display(x) -> ("{}: {}", x.description(), desc)
         }
+        BadValue {
+            description("invalid value for this type")
+        }
         Io(err: io::Error) {
             description("I/O error")
             display(x) -> ("{}: {}", x.description(), err)
@@ -394,15 +397,39 @@ impl ReadableElement for bool {
     ) -> Result<Vec<Self>, Self::Error> {
         match *type_desc {
             PyValue::String(ref s) if s == "|b1" => {
-                // Function to ensure lifetime of bytes slice is correct.
-                fn cast_slice(slice: &mut [bool]) -> &mut [u8] {
-                    unsafe {
-                        ::std::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, slice.len())
+                // This implementation assumes that the `bool` type has the
+                // same size and alignment as `u8`, `false` is represented by
+                // `0x00`, and `true` is represented by `0x01`. Rust hasn't
+                // officially specified the bitwise layout of `bool`, so we
+                // need to check these assumptions.
+                assert_eq!(mem::size_of::<bool>(), mem::size_of::<u8>());
+                assert_eq!(mem::align_of::<bool>(), mem::align_of::<u8>());
+                assert_eq!(unsafe { *(&false as *const bool as *const u8) }, 0x00);
+                assert_eq!(unsafe { *(&true as *const bool as *const u8) }, 0x01);
+
+                // Read the data.
+                let mut bytes: Vec<u8> = vec![0; len];
+                reader.read_exact(&mut bytes)?;
+
+                // Check that all the data is valid (i.e. that each byte
+                // corresponds to the bitwise representation of `false` or
+                // `true`), because creating a `bool` with an invalid value is
+                // undefined behavior.
+                for &byte in &bytes {
+                    if byte > 1 {
+                        return Err(ReadPrimitiveError::BadValue);
                     }
                 }
-                let mut out = vec![false; len];
-                reader.read_exact(cast_slice(&mut out))?;
-                Ok(out)
+
+                // We've performed all the necessary checks; we can now safely
+                // cast the `Vec<u8>` to `Vec<bool>`.
+                {
+                    let ptr = bytes.as_mut_ptr();
+                    let len = bytes.len();
+                    let cap = bytes.capacity();
+                    mem::forget(bytes);
+                    Ok(unsafe { Vec::from_raw_parts(ptr as *mut bool, len, cap) })
+                }
             }
             ref other => Err(ReadPrimitiveError::BadDescriptor(other.clone())),
         }
@@ -422,3 +449,28 @@ impl_primitive_multibyte!(u64, "<u8", ">u8", 0, read_u64_into);
 
 impl_primitive_multibyte!(f32, "<f4", ">f4", 0., read_f32_into_unchecked);
 impl_primitive_multibyte!(f64, "<f8", ">f8", 0., read_f64_into_unchecked);
+
+#[cfg(test)]
+mod test {
+    use super::{ReadableElement, ReadPrimitiveError};
+    use py_literal::Value as PyValue;
+    use std::io::Cursor;
+
+    #[test]
+    fn read_bool() {
+        let data = &[0x00, 0x01, 0x00, 0x00, 0x01];
+        let type_desc = PyValue::String(String::from("|b1"));
+        let out = <bool>::read_vec(Cursor::new(data), &type_desc, data.len()).unwrap();
+        assert_eq!(out, vec![false, true, false, false, true]);
+    }
+
+    #[test]
+    fn read_bool_bad_value() {
+        let data = &[0x00, 0x01, 0x05, 0x00, 0x01];
+        let type_desc = PyValue::String(String::from("|b1"));
+        match <bool>::read_vec(Cursor::new(data), &type_desc, data.len()) {
+            Err(ReadPrimitiveError::BadValue) => {}
+            _ => panic!(),
+        }
+    }
+}
