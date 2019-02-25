@@ -74,6 +74,9 @@ quick_error! {
 pub trait WriteNpyExt {
     /// Writes the array to `writer` in [`.npy`
     /// format](https://docs.scipy.org/doc/numpy/reference/generated/numpy.lib.format.html).
+    ///
+    /// This function is the Rust equivalent of
+    /// [`numpy.save`](https://docs.scipy.org/doc/numpy/reference/generated/numpy.save.html).
     fn write_npy<W: io::Write>(&self, writer: W) -> Result<(), WriteNpyError>;
 }
 
@@ -198,6 +201,10 @@ quick_error! {
 pub trait ReadNpyExt: Sized {
     /// Reads the array from `reader` in [`.npy`
     /// format](https://docs.scipy.org/doc/numpy/reference/generated/numpy.lib.format.html).
+    ///
+    /// This function is the Rust equivalent of
+    /// [`numpy.load`](https://docs.scipy.org/doc/numpy/reference/generated/numpy.load.html)
+    /// for `.npy` files.
     fn read_npy<R: io::Read>(reader: R) -> Result<Self, ReadNpyError>;
 }
 
