@@ -387,6 +387,20 @@ impl ReadableElement for u8 {
     }
 }
 
+impl_writable_primitive!(i8, "|i1", "|i1");
+impl_writable_primitive!(u8, "|u1", "|u1");
+
+impl_primitive_multibyte!(i16, "<i2", ">i2", 0, read_i16_into);
+impl_primitive_multibyte!(i32, "<i4", ">i4", 0, read_i32_into);
+impl_primitive_multibyte!(i64, "<i8", ">i8", 0, read_i64_into);
+
+impl_primitive_multibyte!(u16, "<u2", ">u2", 0, read_u16_into);
+impl_primitive_multibyte!(u32, "<u4", ">u4", 0, read_u32_into);
+impl_primitive_multibyte!(u64, "<u8", ">u8", 0, read_u64_into);
+
+impl_primitive_multibyte!(f32, "<f4", ">f4", 0., read_f32_into);
+impl_primitive_multibyte!(f64, "<f8", ">f8", 0., read_f64_into);
+
 impl ReadableElement for bool {
     type Error = ReadPrimitiveError;
 
@@ -467,20 +481,6 @@ unsafe impl WritableElement for bool {
         writer.write_all(cast(slice))
     }
 }
-
-impl_writable_primitive!(i8, "|i1", "|i1");
-impl_writable_primitive!(u8, "|u1", "|u1");
-
-impl_primitive_multibyte!(i16, "<i2", ">i2", 0, read_i16_into);
-impl_primitive_multibyte!(i32, "<i4", ">i4", 0, read_i32_into);
-impl_primitive_multibyte!(i64, "<i8", ">i8", 0, read_i64_into);
-
-impl_primitive_multibyte!(u16, "<u2", ">u2", 0, read_u16_into);
-impl_primitive_multibyte!(u32, "<u4", ">u4", 0, read_u32_into);
-impl_primitive_multibyte!(u64, "<u8", ">u8", 0, read_u64_into);
-
-impl_primitive_multibyte!(f32, "<f4", ">f4", 0., read_f32_into);
-impl_primitive_multibyte!(f64, "<f8", ">f8", 0., read_f64_into);
 
 #[cfg(test)]
 mod test {
