@@ -436,6 +436,38 @@ impl ReadableElement for bool {
     }
 }
 
+unsafe impl WritableElement for bool {
+    type Error = io::Error;
+
+    fn type_descriptor() -> PyValue {
+        PyValue::String("|b1".into())
+    }
+
+    fn write<W: io::Write>(&self, mut writer: W) -> Result<(), Self::Error> {
+        // Sanity checks on Rust's representation of `bool`.
+        assert_eq!(mem::size_of::<bool>(), 1);
+        assert_eq!(unsafe { *(&false as *const bool as *const u8) }, 0x00);
+        assert_eq!(unsafe { *(&true as *const bool as *const u8) }, 0x01);
+        // Function to ensure lifetime of bytes slice is correct.
+        fn cast(self_: &bool) -> &[u8] {
+            unsafe { std::slice::from_raw_parts(self_ as *const bool as *const u8, 1) }
+        }
+        writer.write_all(cast(self))
+    }
+
+    fn write_slice<W: io::Write>(slice: &[Self], mut writer: W) -> Result<(), Self::Error> {
+        // Sanity checks on Rust's representation of `bool`.
+        assert_eq!(mem::size_of::<bool>(), 1);
+        assert_eq!(unsafe { *(&false as *const bool as *const u8) }, 0x00);
+        assert_eq!(unsafe { *(&true as *const bool as *const u8) }, 0x01);
+        // Function to ensure lifetime of bytes slice is correct.
+        fn cast(slice: &[bool]) -> &[u8] {
+            unsafe { std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len()) }
+        }
+        writer.write_all(cast(slice))
+    }
+}
+
 impl_writable_primitive!(i8, "|i1", "|i1");
 impl_writable_primitive!(u8, "|u1", "|u1");
 
