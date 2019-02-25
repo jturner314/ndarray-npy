@@ -384,6 +384,31 @@ impl ReadableElement for u8 {
     }
 }
 
+impl ReadableElement for bool {
+    type Error = ReadPrimitiveError;
+
+    fn read_vec<R: io::Read>(
+        mut reader: R,
+        type_desc: &PyValue,
+        len: usize,
+    ) -> Result<Vec<Self>, Self::Error> {
+        match *type_desc {
+            PyValue::String(ref s) if s == "|b1" => {
+                // Function to ensure lifetime of bytes slice is correct.
+                fn cast_slice(slice: &mut [bool]) -> &mut [u8] {
+                    unsafe {
+                        ::std::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, slice.len())
+                    }
+                }
+                let mut out = vec![false; len];
+                reader.read_exact(cast_slice(&mut out))?;
+                Ok(out)
+            }
+            ref other => Err(ReadPrimitiveError::BadDescriptor(other.clone())),
+        }
+    }
+}
+
 impl_writable_primitive!(i8, "|i1", "|i1");
 impl_writable_primitive!(u8, "|u1", "|u1");
 
