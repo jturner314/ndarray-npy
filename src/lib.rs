@@ -27,7 +27,7 @@
 //!   `'string'`, `"string"`, `'''string'''`, or `"""string"""`.
 //!
 //! * `WritableElement` and `ReadableElement` are currently implemented only
-//!   for fixed-size integers and floating point numbers.
+//!   for fixed-size integers, floating point numbers, and `bool`.
 //!
 //! The plan is to add support for more element types (including custom
 //! user-defined structs) in the future.
