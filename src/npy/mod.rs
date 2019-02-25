@@ -248,7 +248,7 @@ macro_rules! impl_writable_primitive {
                 // Function to ensure lifetime of bytes slice is correct.
                 fn cast(self_: &$elem) -> &[u8] {
                     unsafe {
-                        ::std::slice::from_raw_parts(
+                        std::slice::from_raw_parts(
                             self_ as *const $elem as *const u8,
                             mem::size_of::<$elem>(),
                         )
@@ -261,7 +261,7 @@ macro_rules! impl_writable_primitive {
                 // Function to ensure lifetime of bytes slice is correct.
                 fn cast(slice: &[$elem]) -> &[u8] {
                     unsafe {
-                        ::std::slice::from_raw_parts(
+                        std::slice::from_raw_parts(
                             slice.as_ptr() as *const u8,
                             slice.len() * mem::size_of::<$elem>(),
                         )
@@ -305,7 +305,7 @@ macro_rules! impl_readable_primitive {
                         // Function to ensure lifetime of bytes slice is correct.
                         fn cast_slice(slice: &mut [$elem]) -> &mut [u8] {
                             unsafe {
-                                ::std::slice::from_raw_parts_mut(
+                                std::slice::from_raw_parts_mut(
                                     slice.as_mut_ptr() as *mut u8,
                                     slice.len() * mem::size_of::<$elem>(),
                                 )
@@ -356,7 +356,7 @@ impl ReadableElement for i8 {
                 // Function to ensure lifetime of bytes slice is correct.
                 fn cast_slice(slice: &mut [i8]) -> &mut [u8] {
                     unsafe {
-                        ::std::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, slice.len())
+                        std::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, slice.len())
                     }
                 }
                 let mut out = vec![0; len];

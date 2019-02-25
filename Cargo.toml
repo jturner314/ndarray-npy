@@ -8,6 +8,7 @@ description = ".npy and .npz file format support for ndarray"
 keywords = ["npy", "npz", "ndarray", "numpy", "array"]
 categories = ["parser-implementations", "encoding", "science"]
 readme = "README.md"
+edition = "2018"
 
 [badges]
 travis-ci = { repository = "jturner314/ndarray-npy", branch = "master" }

@@ -23,7 +23,7 @@ quick_error! {
         NonAscii {
             description("non-ascii in array format string")
             display(x) -> ("{}", x.description())
-            from(::std::str::Utf8Error)
+            from(std::str::Utf8Error)
         }
         UnknownKey(key: PyValue) {
             description("unknown key")
@@ -131,11 +131,11 @@ impl Version {
         let mut out = vec![0; self.header_len_num_bytes()];
         match *self {
             Version::V1_0 => {
-                assert!(header_len <= ::std::u16::MAX as usize);
+                assert!(header_len <= std::u16::MAX as usize);
                 LittleEndian::write_u16(&mut out, header_len as u16);
             }
             Version::V2_0 => {
-                assert!(header_len <= ::std::u32::MAX as usize);
+                assert!(header_len <= std::u32::MAX as usize);
                 LittleEndian::write_u32(&mut out, header_len as u32);
             }
         }
@@ -254,7 +254,7 @@ impl Header {
             Some(_) | None => Err(HeaderParseError::MissingNewline)?,
         };
         let header_str = if without_newline.is_ascii() {
-            unsafe { ::std::str::from_utf8_unchecked(without_newline) }
+            unsafe { std::str::from_utf8_unchecked(without_newline) }
         } else {
             return Err(HeaderParseError::NonAscii)?;
         };
@@ -295,7 +295,7 @@ impl Header {
 
         // Determine appropriate version based on minimum number of bytes needed to
         // represent header length (including final newline).
-        let version = if arr_format.len() + NEWLINE_LEN > ::std::u16::MAX as usize {
+        let version = if arr_format.len() + NEWLINE_LEN > std::u16::MAX as usize {
             Version::V2_0
         } else {
             Version::V1_0

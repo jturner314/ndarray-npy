@@ -1,4 +1,6 @@
-use {ReadNpyError, ReadNpyExt, ReadableElement, WritableElement, WriteNpyError, WriteNpyExt};
+use crate::{
+    ReadNpyError, ReadNpyExt, ReadableElement, WritableElement, WriteNpyError, WriteNpyExt
+};
 use ndarray::{Data, DataOwned};
 use ndarray::prelude::*;
 use std::error::Error;
