@@ -15,10 +15,10 @@ from/to [`.npy`] and [`.npz`] files. See the
 [`.npz`]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.savez.html
 
 **This crate is a work-in-progress.** It currently supports only a subset of
-`.npy` header descriptors and supports only primitive numeric types as the
-array element type. You can implement `ReadableElement` and `WritableElement`
-for your own types, but the next breaking release of this library will probably
-change those traits.
+`.npy` header descriptors and supports only primitive fixed-size integer,
+floating point, and `bool` types as the array element type. You can implement
+`ReadableElement` and `WritableElement` for your own types, but the next
+breaking release of this library will probably change those traits.
 
 Future plans include support for:
 

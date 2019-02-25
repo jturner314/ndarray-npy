@@ -387,6 +387,20 @@ impl ReadableElement for u8 {
     }
 }
 
+impl_writable_primitive!(i8, "|i1", "|i1");
+impl_writable_primitive!(u8, "|u1", "|u1");
+
+impl_primitive_multibyte!(i16, "<i2", ">i2", 0, read_i16_into);
+impl_primitive_multibyte!(i32, "<i4", ">i4", 0, read_i32_into);
+impl_primitive_multibyte!(i64, "<i8", ">i8", 0, read_i64_into);
+
+impl_primitive_multibyte!(u16, "<u2", ">u2", 0, read_u16_into);
+impl_primitive_multibyte!(u32, "<u4", ">u4", 0, read_u32_into);
+impl_primitive_multibyte!(u64, "<u8", ">u8", 0, read_u64_into);
+
+impl_primitive_multibyte!(f32, "<f4", ">f4", 0., read_f32_into);
+impl_primitive_multibyte!(f64, "<f8", ">f8", 0., read_f64_into);
+
 impl ReadableElement for bool {
     type Error = ReadPrimitiveError;
 
@@ -436,19 +450,37 @@ impl ReadableElement for bool {
     }
 }
 
-impl_writable_primitive!(i8, "|i1", "|i1");
-impl_writable_primitive!(u8, "|u1", "|u1");
+unsafe impl WritableElement for bool {
+    type Error = io::Error;
 
-impl_primitive_multibyte!(i16, "<i2", ">i2", 0, read_i16_into);
-impl_primitive_multibyte!(i32, "<i4", ">i4", 0, read_i32_into);
-impl_primitive_multibyte!(i64, "<i8", ">i8", 0, read_i64_into);
+    fn type_descriptor() -> PyValue {
+        PyValue::String("|b1".into())
+    }
 
-impl_primitive_multibyte!(u16, "<u2", ">u2", 0, read_u16_into);
-impl_primitive_multibyte!(u32, "<u4", ">u4", 0, read_u32_into);
-impl_primitive_multibyte!(u64, "<u8", ">u8", 0, read_u64_into);
+    fn write<W: io::Write>(&self, mut writer: W) -> Result<(), Self::Error> {
+        // Sanity checks on Rust's representation of `bool`.
+        assert_eq!(mem::size_of::<bool>(), 1);
+        assert_eq!(unsafe { *(&false as *const bool as *const u8) }, 0x00);
+        assert_eq!(unsafe { *(&true as *const bool as *const u8) }, 0x01);
+        // Function to ensure lifetime of bytes slice is correct.
+        fn cast(self_: &bool) -> &[u8] {
+            unsafe { std::slice::from_raw_parts(self_ as *const bool as *const u8, 1) }
+        }
+        writer.write_all(cast(self))
+    }
 
-impl_primitive_multibyte!(f32, "<f4", ">f4", 0., read_f32_into);
-impl_primitive_multibyte!(f64, "<f8", ">f8", 0., read_f64_into);
+    fn write_slice<W: io::Write>(slice: &[Self], mut writer: W) -> Result<(), Self::Error> {
+        // Sanity checks on Rust's representation of `bool`.
+        assert_eq!(mem::size_of::<bool>(), 1);
+        assert_eq!(unsafe { *(&false as *const bool as *const u8) }, 0x00);
+        assert_eq!(unsafe { *(&true as *const bool as *const u8) }, 0x01);
+        // Function to ensure lifetime of bytes slice is correct.
+        fn cast(slice: &[bool]) -> &[u8] {
+            unsafe { std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len()) }
+        }
+        writer.write_all(cast(slice))
+    }
+}
 
 #[cfg(test)]
 mod test {
