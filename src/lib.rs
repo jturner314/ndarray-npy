@@ -2,7 +2,7 @@
 //! from/to [`.npy`] and [`.npz`] files.
 //!
 //! [`ndarray`]: https://github.com/bluss/ndarray
-//! [`.npy`]: https://docs.scipy.org/doc/numpy/neps/npy-format.html
+//! [`.npy`]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.lib.format.html
 //! [`.npz`]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.savez.html
 //!
 //! See [`ReadNpyExt`] and [`WriteNpyExt`] for reading/writing `.npy` files.
@@ -32,7 +32,7 @@
 //! The plan is to add support for more element types (including custom
 //! user-defined structs) in the future.
 //!
-//! [header dictionary]: https://docs.scipy.org/doc/numpy-dev/neps/npy-format.html#format-specification-version-1-0
+//! [header dictionary]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.lib.format.html#format-version-1-0
 
 extern crate byteorder;
 extern crate ndarray;

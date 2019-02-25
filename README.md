@@ -11,7 +11,7 @@ from/to [`.npy`] and [`.npz`] files. See the
 [documentation](https://docs.rs/ndarray-npy) for more information.
 
 [`ndarray`]: https://github.com/bluss/ndarray
-[`.npy`]: https://docs.scipy.org/doc/numpy/neps/npy-format.html
+[`.npy`]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.lib.format.html
 [`.npz`]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.savez.html
 
 **This crate is a work-in-progress.** It currently supports only a subset of
