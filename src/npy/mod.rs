@@ -408,6 +408,35 @@ impl_primitive_multibyte!(u64, "<u8", ">u8", 0, read_u64_into);
 impl_primitive_multibyte!(f32, "<f4", ">f4", 0., read_f32_into);
 impl_primitive_multibyte!(f64, "<f8", ">f8", 0., read_f64_into);
 
+/// Verify a few properties of `bool`:
+///
+/// 1. `bool` has the same size as `u8`.
+/// 2. `bool` has the same alignment as `u8`.
+/// 3. The bitwise representation of `false` is `0x00`.
+/// 4. The bitwise representation of `true` is `0x01`.
+///
+/// As far as I know, the only one of these that Rust has officially guaranteed
+/// is number 1, so we definitely need to check 2 through 4.
+///
+/// These properties are used by the `ReadableElement` and `WritableElement`
+/// implementations of `bool`.
+mod check_bool_assumptions {
+    use static_assertions::{assert_eq_size, const_assert_eq};
+    use std::mem;
+
+    assert_eq_size!(bool_has_size_of_u8; bool, u8);
+    const_assert_eq!(bool_has_align_of_u8; mem::align_of::<bool>(), mem::align_of::<u8>());
+
+    #[repr(C)]
+    union BoolOrU8 {
+        bool: bool,
+        u8: u8,
+    }
+    assert_eq_size!(booloru8_has_size_of_u8; BoolOrU8, u8);
+    const_assert_eq!(false_is_zero; unsafe { BoolOrU8 { bool: false }.u8 }, 0x00);
+    const_assert_eq!(true_is_one; unsafe { BoolOrU8 { bool: true }.u8 }, 0x01);
+}
+
 impl ReadableElement for bool {
     type Error = ReadPrimitiveError;
 
@@ -418,16 +447,6 @@ impl ReadableElement for bool {
     ) -> Result<Vec<Self>, Self::Error> {
         match *type_desc {
             PyValue::String(ref s) if s == "|b1" => {
-                // This implementation assumes that the `bool` type has the
-                // same size and alignment as `u8`, `false` is represented by
-                // `0x00`, and `true` is represented by `0x01`. Rust hasn't
-                // officially specified the bitwise layout of `bool`, so we
-                // need to check these assumptions.
-                assert_eq!(mem::size_of::<bool>(), mem::size_of::<u8>());
-                assert_eq!(mem::align_of::<bool>(), mem::align_of::<u8>());
-                assert_eq!(unsafe { *(&false as *const bool as *const u8) }, 0x00);
-                assert_eq!(unsafe { *(&true as *const bool as *const u8) }, 0x01);
-
                 // Read the data.
                 let mut bytes: Vec<u8> = vec![0; len];
                 reader.read_exact(&mut bytes)?;
@@ -435,20 +454,34 @@ impl ReadableElement for bool {
                 // Check that all the data is valid (i.e. that each byte
                 // corresponds to the bitwise representation of `false` or
                 // `true`), because creating a `bool` with an invalid value is
-                // undefined behavior.
+                // undefined behavior. See the `check_bool_assumptions` module.
                 for &byte in &bytes {
                     if byte > 1 {
                         return Err(ReadPrimitiveError::BadValue);
                     }
                 }
 
-                // We've performed all the necessary checks; we can now safely
-                // cast the `Vec<u8>` to `Vec<bool>`.
+                // Cast the `Vec<u8>` to `Vec<bool>`.
                 {
                     let ptr = bytes.as_mut_ptr();
                     let len = bytes.len();
                     let cap = bytes.capacity();
                     mem::forget(bytes);
+                    // This is safe because:
+                    //
+                    // * All elements are valid `bool`s. (See the loop above
+                    //   that checks that no value exceeds `0x01` and the
+                    //   `check_bool_assumptions` module which checks that
+                    //   `false` is `0x00` and `true` is `0x01`.)
+                    //
+                    // * `ptr` was originally allocated by `Vec`.
+                    //
+                    // * `bool` has the same size and alignment as `u8`. (See
+                    //   the `check_bool_assumptions module.)
+                    //
+                    // * `len` and `cap` are copied directly from the
+                    //   `Vec<u8>`, so `len <= cap` and `cap` is the capacity
+                    //   `ptr` was allocated with.
                     Ok(unsafe { Vec::from_raw_parts(ptr as *mut bool, len, cap) })
                 }
             }
@@ -457,37 +490,10 @@ impl ReadableElement for bool {
     }
 }
 
-unsafe impl WritableElement for bool {
-    type Error = io::Error;
-
-    fn type_descriptor() -> PyValue {
-        PyValue::String("|b1".into())
-    }
-
-    fn write<W: io::Write>(&self, mut writer: W) -> Result<(), Self::Error> {
-        // Sanity checks on Rust's representation of `bool`.
-        assert_eq!(mem::size_of::<bool>(), 1);
-        assert_eq!(unsafe { *(&false as *const bool as *const u8) }, 0x00);
-        assert_eq!(unsafe { *(&true as *const bool as *const u8) }, 0x01);
-        // Function to ensure lifetime of bytes slice is correct.
-        fn cast(self_: &bool) -> &[u8] {
-            unsafe { std::slice::from_raw_parts(self_ as *const bool as *const u8, 1) }
-        }
-        writer.write_all(cast(self))
-    }
-
-    fn write_slice<W: io::Write>(slice: &[Self], mut writer: W) -> Result<(), Self::Error> {
-        // Sanity checks on Rust's representation of `bool`.
-        assert_eq!(mem::size_of::<bool>(), 1);
-        assert_eq!(unsafe { *(&false as *const bool as *const u8) }, 0x00);
-        assert_eq!(unsafe { *(&true as *const bool as *const u8) }, 0x01);
-        // Function to ensure lifetime of bytes slice is correct.
-        fn cast(slice: &[bool]) -> &[u8] {
-            unsafe { std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len()) }
-        }
-        writer.write_all(cast(slice))
-    }
-}
+// See the `check_bool_assumptions` module which verifies that `bool` is one
+// byte, the bitwise representation of `false` is `0x00`, and the bitwise
+// representation of `true` is `0x01`, so we can just cast the data in-place.
+impl_writable_primitive!(bool, "|b1", "|b1");
 
 #[cfg(test)]
 mod test {
