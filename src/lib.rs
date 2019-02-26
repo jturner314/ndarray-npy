@@ -40,6 +40,7 @@ extern crate num_traits;
 extern crate py_literal;
 #[macro_use]
 extern crate quick_error;
+extern crate static_assertions;
 #[cfg(feature = "npz")]
 extern crate zip;
 
