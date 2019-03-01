@@ -313,34 +313,47 @@ macro_rules! impl_writable_primitive {
     };
 }
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum ReadPrimitiveError {
-        /// The type descriptor does not match the element type.
-        BadDescriptor(desc: PyValue) {
-            description("bad descriptor for this type")
-            display(x) -> ("{}: {}", x.description(), desc)
+/// An error reading a primitive element.
+#[derive(Debug)]
+pub enum ReadPrimitiveError {
+    /// The type descriptor does not match the element type.
+    BadDescriptor(PyValue),
+    /// One of the values of the elements in the data is invalid for the
+    /// element type.
+    BadValue,
+    /// The file does not contain all the data described in the header.
+    MissingData,
+    /// Extra bytes are present between the end of the data and the end of the
+    /// file.
+    ExtraBytes(usize),
+    /// An error caused by I/O.
+    Io(io::Error),
+}
+
+impl Error for ReadPrimitiveError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            ReadPrimitiveError::BadDescriptor(_) => None,
+            ReadPrimitiveError::BadValue => None,
+            ReadPrimitiveError::MissingData => None,
+            ReadPrimitiveError::ExtraBytes(_) => None,
+            ReadPrimitiveError::Io(err) => Some(err),
         }
-        /// One of the values of the elements in the data is invalid for the
-        /// element type.
-        BadValue {
-            description("invalid value for this type")
-        }
-        /// The file does not contain all the data described in the header.
-        MissingData {
-            description("reached EOF before reading all data")
-        }
-        /// Extra bytes are present between the end of the data and the end of
-        /// the file.
-        ExtraBytes(num_extra_bytes: usize) {
-            description("file had extra bytes before EOF")
-            display(x) -> ("file had {} extra bytes before EOF", num_extra_bytes)
-        }
-        /// I/O error.
-        Io(err: io::Error) {
-            description("I/O error")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
+    }
+}
+
+impl fmt::Display for ReadPrimitiveError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ReadPrimitiveError::BadDescriptor(desc) => {
+                write!(f, "bad descriptor for this type: {}", desc)
+            }
+            ReadPrimitiveError::BadValue => write!(f, "invalid value for this type"),
+            ReadPrimitiveError::MissingData => write!(f, "reached EOF before reading all data"),
+            ReadPrimitiveError::ExtraBytes(num_extra_bytes) => {
+                write!(f, "file had {} extra bytes before EOF", num_extra_bytes)
+            }
+            ReadPrimitiveError::Io(err) => write!(f, "I/O error: {}", err),
         }
     }
 }
