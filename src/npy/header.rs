@@ -69,21 +69,39 @@ impl From<PyValueParseError> for HeaderParseError {
     }
 }
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum HeaderReadError {
-        Io(err: io::Error) {
-            description("I/O error")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
-            from()
+#[derive(Debug)]
+pub enum HeaderReadError {
+    Io(io::Error),
+    Parse(HeaderParseError),
+}
+
+impl Error for HeaderReadError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            HeaderReadError::Io(err) => Some(err),
+            HeaderReadError::Parse(err) => Some(err),
         }
-        Parse(err: HeaderParseError) {
-            description("error parsing header")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
-            from()
+    }
+}
+
+impl fmt::Display for HeaderReadError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            HeaderReadError::Io(err) => write!(f, "I/O error: {}", err),
+            HeaderReadError::Parse(err) => write!(f, "error parsing header: {}", err),
         }
+    }
+}
+
+impl From<io::Error> for HeaderReadError {
+    fn from(err: io::Error) -> HeaderReadError {
+        HeaderReadError::Io(err)
+    }
+}
+
+impl From<HeaderParseError> for HeaderReadError {
+    fn from(err: HeaderParseError) -> HeaderReadError {
+        HeaderReadError::Parse(err)
     }
 }
 
