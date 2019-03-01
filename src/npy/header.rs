@@ -10,48 +10,62 @@ use std::io;
 /// Magic string to indicate npy format.
 const MAGIC_STRING: &[u8] = b"\x93NUMPY";
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum HeaderParseError {
-        MagicString {
-            description("start does not match magic string")
-            display(x) -> ("{}", x.description())
+#[derive(Debug)]
+pub enum HeaderParseError {
+    MagicString,
+    Version { major: u8, minor: u8 },
+    NonAscii,
+    UnknownKey(PyValue),
+    MissingKey(String),
+    IllegalValue { key: String, value: PyValue },
+    DictParse(PyValueParseError),
+    MetaNotDict(PyValue),
+    MissingNewline,
+}
+
+impl Error for HeaderParseError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        use HeaderParseError::*;
+        match self {
+            MagicString => None,
+            Version { .. } => None,
+            NonAscii => None,
+            UnknownKey(_) => None,
+            MissingKey(_) => None,
+            IllegalValue { .. } => None,
+            DictParse(err) => Some(err),
+            MetaNotDict(_) => None,
+            MissingNewline => None,
         }
-        Version(major: u8, minor: u8) {
-            description("unknown version number")
-            display(x) -> ("{}: {}.{}", x.description(), major, minor)
+    }
+}
+
+impl fmt::Display for HeaderParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use HeaderParseError::*;
+        match self {
+            MagicString => write!(f, "start does not match magic string"),
+            Version { major, minor } => write!(f, "unknown version number: {}.{}", major, minor),
+            NonAscii => write!(f, "non-ascii in array format string"),
+            UnknownKey(key) => write!(f, "unknown key: {}", key),
+            MissingKey(key) => write!(f, "missing key: {}", key),
+            IllegalValue { key, value } => write!(f, "illegal value for key {}: {}", key, value),
+            DictParse(err) => write!(f, "error parsing metadata dict: {}", err),
+            MetaNotDict(value) => write!(f, "metadata is not a dict: {}", value),
+            MissingNewline => write!(f, "newline missing at end of header"),
         }
-        NonAscii {
-            description("non-ascii in array format string")
-            display(x) -> ("{}", x.description())
-            from(std::str::Utf8Error)
-        }
-        UnknownKey(key: PyValue) {
-            description("unknown key")
-            display(x) -> ("{}: {}", x.description(), key)
-        }
-        MissingKey(key: String) {
-            description("missing key")
-            display(x) -> ("{}: {}", x.description(), key)
-        }
-        IllegalValue(key: String, value: PyValue) {
-            description("illegal value for key")
-            display(x) -> ("{} {}: {}", x.description(), key, value)
-        }
-        DictParse(err: PyValueParseError){
-            description("error parsing metadata dict")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
-            from()
-        }
-        MetaNotDict(value: PyValue) {
-            description("metadata is not a dict")
-            display(x) -> ("{}: {}", x.description(), value)
-        }
-        MissingNewline {
-            description("newline missing at end of header")
-            display(x) -> ("{}", x.description())
-        }
+    }
+}
+
+impl From<std::str::Utf8Error> for HeaderParseError {
+    fn from(_: std::str::Utf8Error) -> HeaderParseError {
+        HeaderParseError::NonAscii
+    }
+}
+
+impl From<PyValueParseError> for HeaderParseError {
+    fn from(err: PyValueParseError) -> HeaderParseError {
+        HeaderParseError::DictParse(err)
     }
 }
 
@@ -89,7 +103,7 @@ impl Version {
         match (bytes[0], bytes[1]) {
             (0x01, 0x00) => Ok(Version::V1_0),
             (0x02, 0x00) => Ok(Version::V2_0),
-            (major, minor) => Err(HeaderParseError::Version(major, minor)),
+            (major, minor) => Err(HeaderParseError::Version { major, minor }),
         }
     }
 
@@ -175,42 +189,47 @@ impl Header {
             let mut type_descriptor: Option<PyValue> = None;
             let mut fortran_order: Option<bool> = None;
             let mut shape: Option<Vec<usize>> = None;
-            for (key, val) in dict {
+            for (key, value) in dict {
                 match key {
                     PyValue::String(ref k) if k == "descr" => {
-                        type_descriptor = Some(val);
+                        type_descriptor = Some(value);
                     }
                     PyValue::String(ref k) if k == "fortran_order" => {
-                        if let PyValue::Boolean(b) = val {
+                        if let PyValue::Boolean(b) = value {
                             fortran_order = Some(b);
                         } else {
-                            return Err(HeaderParseError::IllegalValue(
-                                "fortran_order".to_owned(),
-                                val,
-                            ));
+                            return Err(HeaderParseError::IllegalValue {
+                                key: "fortran_order".to_owned(),
+                                value,
+                            });
                         }
                     }
                     PyValue::String(ref k) if k == "shape" => {
-                        if let PyValue::Tuple(ref tuple) = val {
+                        if let PyValue::Tuple(ref tuple) = value {
                             let mut out = Vec::with_capacity(tuple.len());
                             for elem in tuple {
                                 if let &PyValue::Integer(ref int) = elem {
-                                    out.push(int.to_usize().ok_or_else(|| {
-                                        HeaderParseError::IllegalValue(
-                                            "shape".to_owned(),
-                                            val.clone(),
-                                        )
-                                    })?);
+                                    if let Some(int) = int.to_usize() {
+                                        out.push(int)
+                                    } else {
+                                        return Err(HeaderParseError::IllegalValue {
+                                            key: "shape".to_owned(),
+                                            value,
+                                        });
+                                    }
                                 } else {
-                                    return Err(HeaderParseError::IllegalValue(
-                                        "shape".to_owned(),
-                                        val.clone(),
-                                    ));
+                                    return Err(HeaderParseError::IllegalValue {
+                                        key: "shape".to_owned(),
+                                        value,
+                                    });
                                 }
                             }
                             shape = Some(out);
                         } else {
-                            return Err(HeaderParseError::IllegalValue("shape".to_owned(), val));
+                            return Err(HeaderParseError::IllegalValue {
+                                key: "shape".to_owned(),
+                                value,
+                            });
                         }
                     }
                     k => return Err(HeaderParseError::UnknownKey(k)),
