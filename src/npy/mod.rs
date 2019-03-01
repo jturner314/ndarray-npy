@@ -157,41 +157,61 @@ pub trait ReadableElement: Sized {
     ) -> Result<Vec<Self>, Self::Error>;
 }
 
-quick_error! {
-    /// An error reading a `.npy` file.
-    #[derive(Debug)]
-    pub enum ReadNpyError {
-        /// An error caused by reading the file header.
-        Header(err: HeaderReadError) {
-            description("error reading header")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
-            from()
+/// An error reading a `.npy` file.
+#[derive(Debug)]
+pub enum ReadNpyError {
+    /// An error caused by reading the file header.
+    Header(HeaderReadError),
+    /// An error issued by the element type when reading the data.
+    ///
+    /// Among other things, causes can include:
+    ///
+    /// * if the header type description does not match the element type
+    /// * if the reader has fewer elements than specified in the header
+    /// * if the reader has extra bytes after reading the data
+    ReadableElement(Box<dyn Error + Send + Sync>),
+    /// Overflow while computing the length of the array from the shape
+    /// described in the file header.
+    LengthOverflow,
+    /// An error caused by incorrect `Dimension` type.
+    WrongNdim(Option<usize>, usize),
+}
+
+impl Error for ReadNpyError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            ReadNpyError::Header(err) => Some(err),
+            ReadNpyError::ReadableElement(err) => Some(&**err),
+            ReadNpyError::LengthOverflow => None,
+            ReadNpyError::WrongNdim(_, _) => None,
         }
-        /// An error issued by the element type when reading the data.
-        ///
-        /// Among other things, causes can include:
-        ///
-        /// * if the header type description does not match the element type
-        /// * if the reader has fewer elements than specified in the header
-        /// * if the reader has extra bytes after reading the data
-        ReadableElement(err: Box<Error + Send + Sync>) {
-            description("ReadableElement error")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(&**err)
-            from(ReadPrimitiveError)
+    }
+}
+
+impl fmt::Display for ReadNpyError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ReadNpyError::Header(err) => write!(f, "error reading header: {}", err),
+            ReadNpyError::ReadableElement(err) => write!(f, "ReadableElement error: {}", err),
+            ReadNpyError::LengthOverflow => write!(f, "overflow computing length from shape"),
+            ReadNpyError::WrongNdim(expected, actual) => write!(
+                f,
+                "ndim {} of array did not match Dimension type with NDIM = {:?}",
+                actual, expected
+            ),
         }
-        /// Overflow while computing the length of the array from the shape
-        /// described in the file header.
-        LengthOverflow {
-            description("overflow computing length from shape")
-            display(x) -> ("{}", x.description())
-        }
-        /// An error caused by incorrect `Dimension` type.
-        WrongNdim(expected: Option<usize>, actual: usize) {
-            description("ndim of array did not match specified Dimension type")
-            display(x) -> ("ndim {} of array did not match Dimension type with NDIM = {:?}", actual, expected)
-        }
+    }
+}
+
+impl From<HeaderReadError> for ReadNpyError {
+    fn from(err: HeaderReadError) -> ReadNpyError {
+        ReadNpyError::Header(err)
+    }
+}
+
+impl From<ReadPrimitiveError> for ReadNpyError {
+    fn from(err: ReadPrimitiveError) -> ReadNpyError {
+        ReadNpyError::ReadableElement(Box::new(err))
     }
 }
 
