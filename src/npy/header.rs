@@ -176,23 +176,38 @@ impl Version {
     }
 }
 
+#[derive(Debug)]
+pub enum FormatHeaderError {
+    PyValue(PyValueFormatError),
+}
+
+impl Error for FormatHeaderError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            FormatHeaderError::PyValue(err) => Some(err),
+        }
+    }
+}
+
+impl fmt::Display for FormatHeaderError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            FormatHeaderError::PyValue(err) => write!(f, "error formatting Python value: {}", err),
+        }
+    }
+}
+
+impl From<PyValueFormatError> for FormatHeaderError {
+    fn from(err: PyValueFormatError) -> FormatHeaderError {
+        FormatHeaderError::PyValue(err)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Header {
     pub type_descriptor: PyValue,
     pub fortran_order: bool,
     pub shape: Vec<usize>,
-}
-
-quick_error! {
-    #[derive(Debug)]
-    pub enum FormatHeaderError {
-        PyValue(err: PyValueFormatError) {
-            description("error formatting Python value")
-            display(x) -> ("{}", x.description())
-            cause(err)
-            from()
-        }
-    }
 }
 
 impl fmt::Display for Header {
