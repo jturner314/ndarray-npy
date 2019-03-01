@@ -238,26 +238,15 @@ impl Header {
                         }
                     }
                     PyValue::String(ref k) if k == "shape" => {
-                        if let PyValue::Tuple(ref tuple) = value {
-                            let mut out = Vec::with_capacity(tuple.len());
-                            for elem in tuple {
-                                if let &PyValue::Integer(ref int) = elem {
-                                    if let Some(int) = int.to_usize() {
-                                        out.push(int)
-                                    } else {
-                                        return Err(HeaderParseError::IllegalValue {
-                                            key: "shape".to_owned(),
-                                            value,
-                                        });
-                                    }
-                                } else {
-                                    return Err(HeaderParseError::IllegalValue {
-                                        key: "shape".to_owned(),
-                                        value,
-                                    });
-                                }
-                            }
-                            shape = Some(out);
+                        fn parse_shape(value: &PyValue) -> Option<Vec<usize>> {
+                            value
+                                .as_tuple()?
+                                .iter()
+                                .map(|elem| elem.as_integer()?.to_usize())
+                                .collect()
+                        }
+                        if let Some(s) = parse_shape(&value) {
+                            shape = Some(s);
                         } else {
                             return Err(HeaderParseError::IllegalValue {
                                 key: "shape".to_owned(),
