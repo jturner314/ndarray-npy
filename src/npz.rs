@@ -117,24 +117,42 @@ impl<W: Write + Seek> NpzWriter<W> {
     }
 }
 
-quick_error! {
-    /// An error reading a `.npz` file.
-    #[derive(Debug)]
-    pub enum ReadNpzError {
-        /// An error caused by the zip archive.
-        Zip(err: ZipError) {
-            description("zip file error")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
-            from()
+/// An error reading a `.npz` file.
+#[derive(Debug)]
+pub enum ReadNpzError {
+    /// An error caused by the zip archive.
+    Zip(ZipError),
+    /// An error caused by reading an inner `.npy` file.
+    Npy(ReadNpyError),
+}
+
+impl Error for ReadNpzError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            ReadNpzError::Zip(err) => Some(err),
+            ReadNpzError::Npy(err) => Some(err),
         }
-        /// An error caused by reading an inner `.npy` file.
-        Npy(err: ReadNpyError) {
-            description("error reading npy file in npz archive")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
-            from()
+    }
+}
+
+impl fmt::Display for ReadNpzError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ReadNpzError::Zip(err) => write!(f, "zip file error: {}", err),
+            ReadNpzError::Npy(err) => write!(f, "error reading npy file in npz archive: {}", err),
         }
+    }
+}
+
+impl From<ZipError> for ReadNpzError {
+    fn from(err: ZipError) -> ReadNpzError {
+        ReadNpzError::Zip(err)
+    }
+}
+
+impl From<ReadNpyError> for ReadNpzError {
+    fn from(err: ReadNpyError) -> ReadNpzError {
+        ReadNpzError::Npy(err)
     }
 }
 
