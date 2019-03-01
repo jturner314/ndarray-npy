@@ -6,6 +6,7 @@ use ndarray::prelude::*;
 use ndarray::{Data, DataOwned, IntoDimension};
 use py_literal::Value as PyValue;
 use std::error::Error;
+use std::fmt;
 use std::io;
 use std::mem;
 
@@ -23,30 +24,46 @@ pub unsafe trait WritableElement: Sized {
     fn write_slice<W: io::Write>(slice: &[Self], writer: W) -> Result<(), Self::Error>;
 }
 
-quick_error! {
-    /// An error writing a `.npy` file.
-    #[derive(Debug)]
-    pub enum WriteNpyError {
-        /// An error caused by I/O.
-        Io(err: io::Error) {
-            description("I/O error")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
-            from()
+/// An error writing a `.npy` file.
+#[derive(Debug)]
+pub enum WriteNpyError {
+    /// An error caused by I/O.
+    Io(io::Error),
+    /// An error formatting the header.
+    FormatHeader(FormatHeaderError),
+    /// An error issued by the element type when writing the data.
+    WritableElement(Box<dyn Error + Send + Sync>),
+}
+
+impl Error for WriteNpyError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            WriteNpyError::Io(err) => Some(err),
+            WriteNpyError::FormatHeader(err) => Some(err),
+            WriteNpyError::WritableElement(err) => Some(&**err),
         }
-        /// An error formatting the header.
-        FormatHeader(err: FormatHeaderError) {
-            description("error formatting header")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
-            from()
+    }
+}
+
+impl fmt::Display for WriteNpyError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            WriteNpyError::Io(err) => write!(f, "I/O error: {}", err),
+            WriteNpyError::FormatHeader(err) => write!(f, "error formatting header: {}", err),
+            WriteNpyError::WritableElement(err) => write!(f, "WritableElement error: {}", err),
         }
-        /// An error issued by the element type when writing the data.
-        WritableElement(err: Box<Error + Send + Sync>) {
-            description("WritableElement error")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(&**err)
-        }
+    }
+}
+
+impl From<io::Error> for WriteNpyError {
+    fn from(err: io::Error) -> WriteNpyError {
+        WriteNpyError::Io(err)
+    }
+}
+
+impl From<FormatHeaderError> for WriteNpyError {
+    fn from(err: FormatHeaderError) -> WriteNpyError {
+        WriteNpyError::FormatHeader(err)
     }
 }
 
