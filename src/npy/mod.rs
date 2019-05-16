@@ -1,7 +1,7 @@
 pub mod header;
 
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
-use ndarray::{Data, DataOwned, ShapeError};
+use ndarray::{Data, DataOwned, IntoDimension};
 use ndarray::prelude::*;
 use py_literal::Value as PyValue;
 use std::error::Error;
@@ -166,12 +166,10 @@ quick_error! {
             description("file had extra bytes before EOF")
             display(x) -> ("{}", x.description())
         }
-        /// An error caused by incorrect array length or dimensionality.
-        Shape(err: ShapeError) {
-            description("data did not match shape in header")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
-            from()
+        /// An error caused by incorrect `Dimension` type.
+        WrongNdim(expected: Option<usize>, actual: usize) {
+            description("ndim of array did not match specified Dimension type")
+            display(x) -> ("ndim {} of array did not match Dimension type with NDIM = {:?}", actual, expected)
         }
     }
 }
@@ -216,23 +214,26 @@ where
 {
     fn read_npy<R: io::Read>(mut reader: R) -> Result<Self, ReadNpyError> {
         let header = Header::from_reader(&mut reader)?;
-        let shape = if header.fortran_order {
-            header.shape.f()
-        } else {
-            header.shape.into_shape()
+        let shape = header.shape.into_dimension();
+        let ndim = shape.ndim();
+        let len = match shape.size_checked() {
+            Some(len) if len <= std::isize::MAX as usize => len,
+            _ => return Err(ReadNpyError::LengthOverflow),
         };
-        // let len = shape.size_checked().ok_or(ReadNpyError::LengthOverFlow)?;
-        let len = shape.size();
         let data = A::read_vec(&mut reader, &header.type_descriptor, len)
             .map_err(|err| ReadNpyError::ReadableElement(Box::new(err)))?;
         {
             let mut buf = [0];
             match reader.read_exact(&mut buf) {
                 Err(ref err) if err.kind() == io::ErrorKind::UnexpectedEof => (),
-                _ => return Err(ReadNpyError::ExtraBytes),
+                Err(err) => return Err(ReadNpyError::from(err)),
+                Ok(()) => return Err(ReadNpyError::ExtraBytes),
             }
         }
-        Ok(ArrayBase::from_shape_vec(shape, data)?.into_dimensionality()?)
+        ArrayBase::from_shape_vec(shape.set_f(header.fortran_order), data)
+            .unwrap()
+            .into_dimensionality()
+            .map_err(|_| ReadNpyError::WrongNdim(D::NDIM, ndim))
     }
 }
 
