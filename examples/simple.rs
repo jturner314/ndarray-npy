@@ -3,7 +3,7 @@ extern crate ndarray;
 extern crate ndarray_npy;
 
 use ndarray::prelude::*;
-use ndarray_npy::{ReadNpyError, ReadNpyExt, WriteNpyError, WriteNpyExt};
+use ndarray_npy::{ReadNpyExt, WriteNpyError, WriteNpyExt};
 use std::fs::File;
 
 fn write_example() -> Result<(), WriteNpyError> {
@@ -13,7 +13,7 @@ fn write_example() -> Result<(), WriteNpyError> {
     Ok(())
 }
 
-fn read_example() -> Result<(), ReadNpyError> {
+fn read_example() -> Result<(), Box<std::error::Error>> {
     let reader = File::open("array.npy")?;
     let arr = Array2::<i32>::read_npy(reader)?;
     println!("arr =\n{}", arr);

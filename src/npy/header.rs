@@ -4,7 +4,6 @@ use py_literal::{ParseError as PyValueParseError, FormatError as PyValueFormatEr
 use std::error::Error;
 use std::fmt;
 use std::io;
-use super::ReadNpyError;
 
 /// Magic string to indicate npy format.
 const MAGIC_STRING: &[u8] = b"\x93NUMPY";
@@ -230,7 +229,7 @@ impl Header {
         }
     }
 
-    pub fn from_reader<R: io::Read>(mut reader: R) -> Result<Self, ReadNpyError> {
+    pub fn from_reader<R: io::Read>(mut reader: R) -> Result<Self, HeaderReadError> {
         // Check for magic string.
         let mut buf = vec![0; MAGIC_STRING.len()];
         reader.read_exact(&mut buf)?;
