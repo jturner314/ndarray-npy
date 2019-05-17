@@ -7,7 +7,7 @@ use py_literal::Value as PyValue;
 use std::error::Error;
 use std::io;
 use std::mem;
-use self::header::{FormatHeaderError, Header, HeaderParseError};
+use self::header::{FormatHeaderError, Header, HeaderReadError};
 
 /// An array element type that can be written to an `.npy` or `.npz` file.
 pub unsafe trait WritableElement: Sized {
@@ -133,16 +133,9 @@ quick_error! {
     /// An error reading a `.npy` file.
     #[derive(Debug)]
     pub enum ReadNpyError {
-        /// An error caused by I/O.
-        Io(err: io::Error) {
-            description("I/O error")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
-            from()
-        }
-        /// An error caused by parsing the file header.
-        HeaderParse(err: HeaderParseError) {
-            description("error parsing header")
+        /// An error caused by reading the file header.
+        Header(err: HeaderReadError) {
+            description("error reading header")
             display(x) -> ("{}: {}", x.description(), err)
             cause(err)
             from()
@@ -188,9 +181,8 @@ quick_error! {
 /// use ndarray::prelude::*;
 /// use ndarray_npy::ReadNpyExt;
 /// use std::fs::File;
-/// # use ndarray_npy::ReadNpyError;
 ///
-/// # fn read_example() -> Result<(), ReadNpyError> {
+/// # fn read_example() -> Result<(), Box<std::error::Error>> {
 /// let reader = File::open("array.npy")?;
 /// let arr = Array2::<i32>::read_npy(reader)?;
 /// # println!("arr = {}", arr);
