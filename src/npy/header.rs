@@ -1,6 +1,8 @@
 use byteorder::{ByteOrder, LittleEndian};
 use num_traits::ToPrimitive;
-use py_literal::{ParseError as PyValueParseError, FormatError as PyValueFormatError, Value as PyValue};
+use py_literal::{
+    FormatError as PyValueFormatError, ParseError as PyValueParseError, Value as PyValue,
+};
 use std::error::Error;
 use std::fmt;
 use std::io;
@@ -257,9 +259,11 @@ impl Header {
         } else {
             return Err(HeaderParseError::NonAscii)?;
         };
-        Ok(Header::from_py_value(header_str
-            .parse()
-            .map_err(|err| HeaderParseError::from(err))?)?)
+        Ok(Header::from_py_value(
+            header_str
+                .parse()
+                .map_err(|err| HeaderParseError::from(err))?,
+        )?)
     }
 
     fn to_py_value(&self) -> PyValue {
