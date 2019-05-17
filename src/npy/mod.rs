@@ -34,6 +34,7 @@ quick_error! {
             cause(err)
             from()
         }
+        /// An error formatting the header.
         FormatHeader(err: FormatHeaderError) {
             description("error formatting header")
             display(x) -> ("{}: {}", x.description(), err)
