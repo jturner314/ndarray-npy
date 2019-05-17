@@ -1,6 +1,6 @@
 pub mod header;
 
-use byteorder::{self, ByteOrder};
+use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 use ndarray::{Data, DataOwned, ShapeError};
 use ndarray::prelude::*;
 use py_literal::Value as PyValue;
@@ -300,7 +300,7 @@ quick_error! {
 }
 
 macro_rules! impl_readable_primitive {
-    ($elem:ty, $zero:expr, $native_desc:expr, $other_desc:expr, $other_read_into:path) => {
+    ($elem:ty, $little_desc:expr, $big_desc:expr, $zero:expr, $read_into:ident) => {
         impl ReadableElement for $elem {
             type Error = ReadPrimitiveError;
 
@@ -308,25 +308,14 @@ macro_rules! impl_readable_primitive {
                                      -> Result<Vec<Self>, Self::Error>
             {
                 match *type_desc {
-                    PyValue::String(ref s) if s == $native_desc => {
-                        // Function to ensure lifetime of bytes slice is correct.
-                        fn cast_slice(slice: &mut [$elem]) -> &mut [u8] {
-                            unsafe {
-                                std::slice::from_raw_parts_mut(
-                                    slice.as_mut_ptr() as *mut u8,
-                                    slice.len() * mem::size_of::<$elem>(),
-                                )
-                            }
-                        }
+                    PyValue::String(ref s) if s == $little_desc => {
                         let mut out = vec![$zero; len];
-                        reader.read_exact(cast_slice(&mut out))?;
+                        reader.$read_into::<LittleEndian>(&mut out)?;
                         Ok(out)
                     }
-                    PyValue::String(ref s) if s == $other_desc => {
-                        let mut bytes = vec![0; len * mem::size_of::<$elem>()];
-                        reader.read_exact(&mut bytes)?;
+                    PyValue::String(ref s) if s == $big_desc => {
                         let mut out = vec![$zero; len];
-                        $other_read_into(&bytes, &mut out);
+                        reader.$read_into::<BigEndian>(&mut out)?;
                         Ok(out)
                     }
                     ref other => Err(ReadPrimitiveError::BadDescriptor(other.clone())),
@@ -336,17 +325,10 @@ macro_rules! impl_readable_primitive {
     };
 }
 
-macro_rules! impl_primitive_multibyte {
+macro_rules! impl_primitive {
     ($elem:ty, $little_desc:expr, $big_desc:expr, $zero:expr, $read_into:ident) => {
         impl_writable_primitive!($elem, $little_desc, $big_desc);
-        #[cfg(target_endian = "little")]
-        impl_readable_primitive!(
-            $elem, $zero, $little_desc, $big_desc, byteorder::BigEndian::$read_into
-        );
-        #[cfg(target_endian = "big")]
-        impl_readable_primitive!(
-            $elem, $zero, $big_desc, $little_desc, byteorder::LittleEndian::$read_into
-        );
+        impl_readable_primitive!($elem, $little_desc, $big_desc, $zero, $read_into);
     };
 }
 
@@ -397,16 +379,16 @@ impl ReadableElement for u8 {
 impl_writable_primitive!(i8, "|i1", "|i1");
 impl_writable_primitive!(u8, "|u1", "|u1");
 
-impl_primitive_multibyte!(i16, "<i2", ">i2", 0, read_i16_into);
-impl_primitive_multibyte!(i32, "<i4", ">i4", 0, read_i32_into);
-impl_primitive_multibyte!(i64, "<i8", ">i8", 0, read_i64_into);
+impl_primitive!(i16, "<i2", ">i2", 0, read_i16_into);
+impl_primitive!(i32, "<i4", ">i4", 0, read_i32_into);
+impl_primitive!(i64, "<i8", ">i8", 0, read_i64_into);
 
-impl_primitive_multibyte!(u16, "<u2", ">u2", 0, read_u16_into);
-impl_primitive_multibyte!(u32, "<u4", ">u4", 0, read_u32_into);
-impl_primitive_multibyte!(u64, "<u8", ">u8", 0, read_u64_into);
+impl_primitive!(u16, "<u2", ">u2", 0, read_u16_into);
+impl_primitive!(u32, "<u4", ">u4", 0, read_u32_into);
+impl_primitive!(u64, "<u8", ">u8", 0, read_u64_into);
 
-impl_primitive_multibyte!(f32, "<f4", ">f4", 0., read_f32_into);
-impl_primitive_multibyte!(f64, "<f8", ">f8", 0., read_f64_into);
+impl_primitive!(f32, "<f4", ">f4", 0., read_f32_into);
+impl_primitive!(f64, "<f8", ">f8", 0., read_f64_into);
 
 impl ReadableElement for bool {
     type Error = ReadPrimitiveError;
