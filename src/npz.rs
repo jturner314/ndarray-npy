@@ -4,7 +4,7 @@ use crate::{
 use ndarray::{Data, DataOwned};
 use ndarray::prelude::*;
 use std::error::Error;
-use std::io::{self, Read, Seek, Write};
+use std::io::{Read, Seek, Write};
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 use zip::result::ZipError;
 use zip::write::FileOptions;
@@ -13,13 +13,6 @@ quick_error! {
     /// An error writing a `.npz` file.
     #[derive(Debug)]
     pub enum WriteNpzError {
-        /// An error caused by I/O.
-        Io(err: io::Error) {
-            description("I/O error")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
-            from()
-        }
         /// An error caused by the zip file.
         Zip(err: ZipError) {
             description("zip file error")
@@ -49,9 +42,8 @@ quick_error! {
 /// use ndarray::prelude::*;
 /// use ndarray_npy::NpzWriter;
 /// use std::fs::File;
-/// # use ndarray_npy::WriteNpzError;
 ///
-/// # fn write_example() -> Result<(), WriteNpzError> {
+/// # fn write_example() -> Result<(), Box<std::error::Error>> {
 /// let mut npz = NpzWriter::new(File::create("arrays.npz")?);
 /// let a: Array2<i32> = array![[1, 2, 3], [4, 5, 6]];
 /// let b: Array1<i32> = array![7, 8, 9];
@@ -110,13 +102,6 @@ quick_error! {
     /// An error reading a `.npz` file.
     #[derive(Debug)]
     pub enum ReadNpzError {
-        /// An error caused by I/O.
-        Io(err: io::Error) {
-            description("I/O error")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
-            from()
-        }
         /// An error caused by the zip archive.
         Zip(err: ZipError) {
             description("zip file error")
@@ -146,9 +131,8 @@ quick_error! {
 /// use ndarray::prelude::*;
 /// use ndarray_npy::NpzReader;
 /// use std::fs::File;
-/// # use ndarray_npy::ReadNpzError;
 ///
-/// # fn read_example() -> Result<(), ReadNpzError> {
+/// # fn read_example() -> Result<(), Box<std::error::Error>> {
 /// let mut npz = NpzReader::new(File::open("arrays.npz")?)?;
 /// let a: Array2<i32> = npz.by_name("a")?;
 /// let b: Array1<i32> = npz.by_name("b")?;
