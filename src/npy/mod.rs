@@ -122,14 +122,14 @@ where
 pub trait ReadableElement: Sized {
     type Error: 'static + Error + Send + Sync;
 
-    /// Checks `type_desc` and reads a `Vec` of length `len` from `reader`.
+    /// Reads to the end of the `reader`, creating a `Vec` of length `len`.
     ///
     /// This method should return `Err(_)` in at least the following cases:
     ///
     /// * if the `type_desc` does not match `Self`
     /// * if the `reader` has fewer elements than `len`
     /// * if the `reader` has extra bytes after reading `len` elements
-    fn read_vec<R: io::Read>(
+    fn read_to_end_exact_vec<R: io::Read>(
         reader: R,
         type_desc: &PyValue,
         len: usize,
@@ -219,7 +219,7 @@ where
             Some(len) if len <= std::isize::MAX as usize => len,
             _ => return Err(ReadNpyError::LengthOverflow),
         };
-        let data = A::read_vec(&mut reader, &header.type_descriptor, len)
+        let data = A::read_to_end_exact_vec(&mut reader, &header.type_descriptor, len)
             .map_err(|err| ReadNpyError::ReadableElement(Box::new(err)))?;
         ArrayBase::from_shape_vec(shape.set_f(header.fortran_order), data)
             .unwrap()
@@ -332,9 +332,11 @@ macro_rules! impl_readable_primitive {
         impl ReadableElement for $elem {
             type Error = ReadPrimitiveError;
 
-            fn read_vec<R: io::Read>(mut reader: R, type_desc: &PyValue, len: usize)
-                                     -> Result<Vec<Self>, Self::Error>
-            {
+            fn read_to_end_exact_vec<R: io::Read>(
+                mut reader: R,
+                type_desc: &PyValue,
+                len: usize,
+            ) -> Result<Vec<Self>, Self::Error> {
                 let mut out = vec![$zero; len];
                 match *type_desc {
                     PyValue::String(ref s) if s == $little_desc => {
@@ -364,7 +366,7 @@ macro_rules! impl_primitive {
 impl ReadableElement for i8 {
     type Error = ReadPrimitiveError;
 
-    fn read_vec<R: io::Read>(
+    fn read_to_end_exact_vec<R: io::Read>(
         mut reader: R,
         type_desc: &PyValue,
         len: usize,
@@ -390,7 +392,7 @@ impl ReadableElement for i8 {
 impl ReadableElement for u8 {
     type Error = ReadPrimitiveError;
 
-    fn read_vec<R: io::Read>(
+    fn read_to_end_exact_vec<R: io::Read>(
         mut reader: R,
         type_desc: &PyValue,
         len: usize,
@@ -424,7 +426,7 @@ impl_primitive!(f64, "<f8", ">f8", 0., read_f64_into);
 impl ReadableElement for bool {
     type Error = ReadPrimitiveError;
 
-    fn read_vec<R: io::Read>(
+    fn read_to_end_exact_vec<R: io::Read>(
         mut reader: R,
         type_desc: &PyValue,
         len: usize,
@@ -486,7 +488,7 @@ mod test {
     fn read_bool() {
         let data = &[0x00, 0x01, 0x00, 0x00, 0x01];
         let type_desc = PyValue::String(String::from("|b1"));
-        let out = <bool>::read_vec(Cursor::new(data), &type_desc, data.len()).unwrap();
+        let out = <bool>::read_to_end_exact_vec(Cursor::new(data), &type_desc, data.len()).unwrap();
         assert_eq!(out, vec![false, true, false, false, true]);
     }
 
@@ -494,7 +496,7 @@ mod test {
     fn read_bool_bad_value() {
         let data = &[0x00, 0x01, 0x05, 0x00, 0x01];
         let type_desc = PyValue::String(String::from("|b1"));
-        match <bool>::read_vec(Cursor::new(data), &type_desc, data.len()) {
+        match <bool>::read_to_end_exact_vec(Cursor::new(data), &type_desc, data.len()) {
             Err(ReadPrimitiveError::BadValue) => {}
             _ => panic!(),
         }
