@@ -123,6 +123,12 @@ pub trait ReadableElement: Sized {
     type Error: 'static + Error + Send + Sync;
 
     /// Checks `type_desc` and reads a `Vec` of length `len` from `reader`.
+    ///
+    /// This method should return `Err(_)` in at least the following cases:
+    ///
+    /// * if the `type_desc` does not match `Self`
+    /// * if the `reader` has fewer elements than `len`
+    /// * if the `reader` has extra bytes after reading `len` elements
     fn read_vec<R: io::Read>(
         reader: R,
         type_desc: &PyValue,
@@ -142,6 +148,12 @@ quick_error! {
             from()
         }
         /// An error issued by the element type when reading the data.
+        ///
+        /// Among other things, causes can include:
+        ///
+        /// * if the header type description does not match the element type
+        /// * if the reader has fewer elements than specified in the header
+        /// * if the reader has extra bytes after reading the data
         ReadableElement(err: Box<Error + Send + Sync>) {
             description("ReadableElement error")
             display(x) -> ("{}: {}", x.description(), err)
@@ -152,12 +164,6 @@ quick_error! {
         /// described in the file header.
         LengthOverflow {
             description("overflow computing length from shape")
-            display(x) -> ("{}", x.description())
-        }
-        /// Extra bytes are present between the end of the data and the end of
-        /// the file.
-        ExtraBytes {
-            description("file had extra bytes before EOF")
             display(x) -> ("{}", x.description())
         }
         /// An error caused by incorrect `Dimension` type.
@@ -215,14 +221,6 @@ where
         };
         let data = A::read_vec(&mut reader, &header.type_descriptor, len)
             .map_err(|err| ReadNpyError::ReadableElement(Box::new(err)))?;
-        {
-            let mut buf = [0];
-            match reader.read_exact(&mut buf) {
-                Err(ref err) if err.kind() == io::ErrorKind::UnexpectedEof => (),
-                Err(err) => return Err(ReadNpyError::from(err)),
-                Ok(()) => return Err(ReadNpyError::ExtraBytes),
-            }
-        }
         ArrayBase::from_shape_vec(shape.set_f(header.fortran_order), data)
             .unwrap()
             .into_dimensionality()
@@ -277,19 +275,55 @@ macro_rules! impl_writable_primitive {
 quick_error! {
     #[derive(Debug)]
     pub enum ReadPrimitiveError {
+        /// The type descriptor does not match the element type.
         BadDescriptor(desc: PyValue) {
             description("bad descriptor for this type")
             display(x) -> ("{}: {}", x.description(), desc)
         }
+        /// One of the values of the elements in the data is invalid for the
+        /// element type.
         BadValue {
             description("invalid value for this type")
         }
+        /// The file does not contain all the data described in the header.
+        MissingData {
+            description("reached EOF before reading all data")
+        }
+        /// Extra bytes are present between the end of the data and the end of
+        /// the file.
+        ExtraBytes(num_extra_bytes: usize) {
+            description("file had extra bytes before EOF")
+            display(x) -> ("file had {} extra bytes before EOF", num_extra_bytes)
+        }
+        /// I/O error.
         Io(err: io::Error) {
             description("I/O error")
             display(x) -> ("{}: {}", x.description(), err)
             cause(err)
-            from()
         }
+    }
+}
+
+impl From<io::Error> for ReadPrimitiveError {
+    fn from(err: io::Error) -> ReadPrimitiveError {
+        if err.kind() == io::ErrorKind::UnexpectedEof {
+            ReadPrimitiveError::MissingData
+        } else {
+            ReadPrimitiveError::Io(err)
+        }
+    }
+}
+
+/// Returns `Ok(_)` iff the `reader` had no more bytes on entry to this
+/// function.
+///
+/// **Warning** This will consume the remainder of the reader.
+pub fn check_for_extra_bytes<R: io::Read>(reader: &mut R) -> Result<(), ReadPrimitiveError> {
+    let num_extra_bytes = reader.read_to_end(&mut Vec::new())?;
+    if num_extra_bytes == 0 {
+        Ok(())
+    } else {
+        Err(ReadPrimitiveError::ExtraBytes(num_extra_bytes))
     }
 }
 
@@ -301,19 +335,20 @@ macro_rules! impl_readable_primitive {
             fn read_vec<R: io::Read>(mut reader: R, type_desc: &PyValue, len: usize)
                                      -> Result<Vec<Self>, Self::Error>
             {
+                let mut out = vec![$zero; len];
                 match *type_desc {
                     PyValue::String(ref s) if s == $little_desc => {
-                        let mut out = vec![$zero; len];
                         reader.$read_into::<LittleEndian>(&mut out)?;
-                        Ok(out)
                     }
                     PyValue::String(ref s) if s == $big_desc => {
-                        let mut out = vec![$zero; len];
                         reader.$read_into::<BigEndian>(&mut out)?;
-                        Ok(out)
                     }
-                    ref other => Err(ReadPrimitiveError::BadDescriptor(other.clone())),
+                    ref other => {
+                        return Err(ReadPrimitiveError::BadDescriptor(other.clone()));
+                    }
                 }
+                check_for_extra_bytes(&mut reader)?;
+                Ok(out)
             }
         }
     };
@@ -344,6 +379,7 @@ impl ReadableElement for i8 {
                 }
                 let mut out = vec![0; len];
                 reader.read_exact(cast_slice(&mut out))?;
+                check_for_extra_bytes(&mut reader)?;
                 Ok(out)
             }
             ref other => Err(ReadPrimitiveError::BadDescriptor(other.clone())),
@@ -363,6 +399,7 @@ impl ReadableElement for u8 {
             PyValue::String(ref s) if s == "|u1" || s == "u1" || s == "B" => {
                 let mut out = vec![0; len];
                 reader.read_exact(&mut out)?;
+                check_for_extra_bytes(&mut reader)?;
                 Ok(out)
             }
             ref other => Err(ReadPrimitiveError::BadDescriptor(other.clone())),
@@ -397,6 +434,7 @@ impl ReadableElement for bool {
                 // Read the data.
                 let mut bytes: Vec<u8> = vec![0; len];
                 reader.read_exact(&mut bytes)?;
+                check_for_extra_bytes(&mut reader)?;
 
                 // Check that all the data is valid, because creating a `bool`
                 // with an invalid value is undefined behavior. Rust guarantees
