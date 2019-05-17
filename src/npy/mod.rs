@@ -1,13 +1,13 @@
 pub mod header;
 
+use self::header::{FormatHeaderError, Header, HeaderReadError};
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
-use ndarray::{Data, DataOwned, IntoDimension};
 use ndarray::prelude::*;
+use ndarray::{Data, DataOwned, IntoDimension};
 use py_literal::Value as PyValue;
 use std::error::Error;
 use std::io;
 use std::mem;
-use self::header::{FormatHeaderError, Header, HeaderReadError};
 
 /// An array element type that can be written to an `.npy` or `.npz` file.
 pub unsafe trait WritableElement: Sized {
@@ -93,7 +93,8 @@ where
                 type_descriptor: A::type_descriptor(),
                 fortran_order,
                 shape: self.shape().to_owned(),
-            }.to_bytes()?;
+            }
+            .to_bytes()?;
             writer.write_all(&header)?;
             A::write_slice(self.as_slice_memory_order().unwrap(), &mut writer)
                 .map_err(|err| WriteNpyError::WritableElement(Box::new(err)))?;
@@ -104,11 +105,14 @@ where
         } else if self.view().reversed_axes().is_standard_layout() {
             write_contiguous(writer, true)
         } else {
-            writer.write_all(&Header {
-                type_descriptor: A::type_descriptor(),
-                fortran_order: false,
-                shape: self.shape().to_owned(),
-            }.to_bytes()?)?;
+            writer.write_all(
+                &Header {
+                    type_descriptor: A::type_descriptor(),
+                    fortran_order: false,
+                    shape: self.shape().to_owned(),
+                }
+                .to_bytes()?,
+            )?;
             for elem in self.iter() {
                 elem.write(&mut writer)
                     .map_err(|err| WriteNpyError::WritableElement(Box::new(err)))?;
@@ -480,7 +484,7 @@ impl_writable_primitive!(bool, "|b1", "|b1");
 
 #[cfg(test)]
 mod test {
-    use super::{ReadableElement, ReadPrimitiveError};
+    use super::{ReadPrimitiveError, ReadableElement};
     use py_literal::Value as PyValue;
     use std::io::Cursor;
 

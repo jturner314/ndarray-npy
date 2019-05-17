@@ -1,13 +1,13 @@
 use crate::{
-    ReadNpyError, ReadNpyExt, ReadableElement, WritableElement, WriteNpyError, WriteNpyExt
+    ReadNpyError, ReadNpyExt, ReadableElement, WritableElement, WriteNpyError, WriteNpyExt,
 };
-use ndarray::{Data, DataOwned};
 use ndarray::prelude::*;
+use ndarray::{Data, DataOwned};
 use std::error::Error;
 use std::io::{Read, Seek, Write};
-use zip::{CompressionMethod, ZipArchive, ZipWriter};
 use zip::result::ZipError;
 use zip::write::FileOptions;
+use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 quick_error! {
     /// An error writing a `.npz` file.
