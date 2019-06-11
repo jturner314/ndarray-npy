@@ -331,7 +331,41 @@ pub fn check_for_extra_bytes<R: io::Read>(reader: &mut R) -> Result<(), ReadPrim
     }
 }
 
-macro_rules! impl_readable_primitive {
+macro_rules! impl_readable_primitive_one_byte {
+    ($elem:ty, [$($desc:expr),*], $zero:expr, $read_into:ident) => {
+        impl ReadableElement for $elem {
+            type Error = ReadPrimitiveError;
+
+            fn read_to_end_exact_vec<R: io::Read>(
+                mut reader: R,
+                type_desc: &PyValue,
+                len: usize,
+            ) -> Result<Vec<Self>, Self::Error> {
+                match *type_desc {
+                    PyValue::String(ref s) if $(s == $desc)||* => {
+                        let mut out = vec![$zero; len];
+                        reader.$read_into(&mut out)?;
+                        check_for_extra_bytes(&mut reader)?;
+                        Ok(out)
+                    }
+                    ref other => Err(ReadPrimitiveError::BadDescriptor(other.clone())),
+                }
+            }
+        }
+    };
+}
+
+macro_rules! impl_primitive_one_byte {
+    ($elem:ty, $write_desc:expr, [$($read_desc:expr),*], $zero:expr, $read_into:ident) => {
+        impl_writable_primitive!($elem, $write_desc, $write_desc);
+        impl_readable_primitive_one_byte!($elem, [$($read_desc),*], $zero, $read_into);
+    };
+}
+
+impl_primitive_one_byte!(i8, "|i1", ["|i1", "i1", "b"], 0, read_i8_into);
+impl_primitive_one_byte!(u8, "|u1", ["|u1", "u1", "B"], 0, read_exact);
+
+macro_rules! impl_readable_primitive_multi_byte {
     ($elem:ty, $little_desc:expr, $big_desc:expr, $zero:expr, $read_into:ident) => {
         impl ReadableElement for $elem {
             type Error = ReadPrimitiveError;
@@ -360,72 +394,23 @@ macro_rules! impl_readable_primitive {
     };
 }
 
-macro_rules! impl_primitive {
+macro_rules! impl_primitive_multi_byte {
     ($elem:ty, $little_desc:expr, $big_desc:expr, $zero:expr, $read_into:ident) => {
         impl_writable_primitive!($elem, $little_desc, $big_desc);
-        impl_readable_primitive!($elem, $little_desc, $big_desc, $zero, $read_into);
+        impl_readable_primitive_multi_byte!($elem, $little_desc, $big_desc, $zero, $read_into);
     };
 }
 
-impl ReadableElement for i8 {
-    type Error = ReadPrimitiveError;
+impl_primitive_multi_byte!(i16, "<i2", ">i2", 0, read_i16_into);
+impl_primitive_multi_byte!(i32, "<i4", ">i4", 0, read_i32_into);
+impl_primitive_multi_byte!(i64, "<i8", ">i8", 0, read_i64_into);
 
-    fn read_to_end_exact_vec<R: io::Read>(
-        mut reader: R,
-        type_desc: &PyValue,
-        len: usize,
-    ) -> Result<Vec<Self>, Self::Error> {
-        match *type_desc {
-            PyValue::String(ref s) if s == "|i1" || s == "i1" || s == "b" => {
-                // Function to ensure lifetime of bytes slice is correct.
-                fn cast_slice(slice: &mut [i8]) -> &mut [u8] {
-                    unsafe {
-                        std::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, slice.len())
-                    }
-                }
-                let mut out = vec![0; len];
-                reader.read_exact(cast_slice(&mut out))?;
-                check_for_extra_bytes(&mut reader)?;
-                Ok(out)
-            }
-            ref other => Err(ReadPrimitiveError::BadDescriptor(other.clone())),
-        }
-    }
-}
+impl_primitive_multi_byte!(u16, "<u2", ">u2", 0, read_u16_into);
+impl_primitive_multi_byte!(u32, "<u4", ">u4", 0, read_u32_into);
+impl_primitive_multi_byte!(u64, "<u8", ">u8", 0, read_u64_into);
 
-impl ReadableElement for u8 {
-    type Error = ReadPrimitiveError;
-
-    fn read_to_end_exact_vec<R: io::Read>(
-        mut reader: R,
-        type_desc: &PyValue,
-        len: usize,
-    ) -> Result<Vec<Self>, Self::Error> {
-        match *type_desc {
-            PyValue::String(ref s) if s == "|u1" || s == "u1" || s == "B" => {
-                let mut out = vec![0; len];
-                reader.read_exact(&mut out)?;
-                check_for_extra_bytes(&mut reader)?;
-                Ok(out)
-            }
-            ref other => Err(ReadPrimitiveError::BadDescriptor(other.clone())),
-        }
-    }
-}
-
-impl_writable_primitive!(i8, "|i1", "|i1");
-impl_writable_primitive!(u8, "|u1", "|u1");
-
-impl_primitive!(i16, "<i2", ">i2", 0, read_i16_into);
-impl_primitive!(i32, "<i4", ">i4", 0, read_i32_into);
-impl_primitive!(i64, "<i8", ">i8", 0, read_i64_into);
-
-impl_primitive!(u16, "<u2", ">u2", 0, read_u16_into);
-impl_primitive!(u32, "<u4", ">u4", 0, read_u32_into);
-impl_primitive!(u64, "<u8", ">u8", 0, read_u64_into);
-
-impl_primitive!(f32, "<f4", ">f4", 0., read_f32_into);
-impl_primitive!(f64, "<f8", ">f8", 0., read_f64_into);
+impl_primitive_multi_byte!(f32, "<f4", ">f4", 0., read_f32_into);
+impl_primitive_multi_byte!(f64, "<f8", ">f8", 0., read_f64_into);
 
 impl ReadableElement for bool {
     type Error = ReadPrimitiveError;
