@@ -10,9 +10,6 @@ categories = ["parser-implementations", "encoding", "science"]
 readme = "README.md"
 edition = "2018"
 
-[badges]
-travis-ci = { repository = "jturner314/ndarray-npy", branch = "master" }
-
 [dependencies]
 byteorder = "1.2"
 ndarray = "0.12"
