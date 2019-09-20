@@ -38,8 +38,6 @@ extern crate byteorder;
 extern crate ndarray;
 extern crate num_traits;
 extern crate py_literal;
-#[macro_use]
-extern crate quick_error;
 #[cfg(feature = "npz")]
 extern crate zip;
 

@@ -6,6 +6,7 @@ use ndarray::prelude::*;
 use ndarray::{Data, DataOwned, IntoDimension};
 use py_literal::Value as PyValue;
 use std::error::Error;
+use std::fmt;
 use std::io;
 use std::mem;
 
@@ -23,30 +24,46 @@ pub unsafe trait WritableElement: Sized {
     fn write_slice<W: io::Write>(slice: &[Self], writer: W) -> Result<(), Self::Error>;
 }
 
-quick_error! {
-    /// An error writing a `.npy` file.
-    #[derive(Debug)]
-    pub enum WriteNpyError {
-        /// An error caused by I/O.
-        Io(err: io::Error) {
-            description("I/O error")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
-            from()
+/// An error writing a `.npy` file.
+#[derive(Debug)]
+pub enum WriteNpyError {
+    /// An error caused by I/O.
+    Io(io::Error),
+    /// An error formatting the header.
+    FormatHeader(FormatHeaderError),
+    /// An error issued by the element type when writing the data.
+    WritableElement(Box<dyn Error + Send + Sync>),
+}
+
+impl Error for WriteNpyError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            WriteNpyError::Io(err) => Some(err),
+            WriteNpyError::FormatHeader(err) => Some(err),
+            WriteNpyError::WritableElement(err) => Some(&**err),
         }
-        /// An error formatting the header.
-        FormatHeader(err: FormatHeaderError) {
-            description("error formatting header")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
-            from()
+    }
+}
+
+impl fmt::Display for WriteNpyError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            WriteNpyError::Io(err) => write!(f, "I/O error: {}", err),
+            WriteNpyError::FormatHeader(err) => write!(f, "error formatting header: {}", err),
+            WriteNpyError::WritableElement(err) => write!(f, "WritableElement error: {}", err),
         }
-        /// An error issued by the element type when writing the data.
-        WritableElement(err: Box<Error + Send + Sync>) {
-            description("WritableElement error")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(&**err)
-        }
+    }
+}
+
+impl From<io::Error> for WriteNpyError {
+    fn from(err: io::Error) -> WriteNpyError {
+        WriteNpyError::Io(err)
+    }
+}
+
+impl From<FormatHeaderError> for WriteNpyError {
+    fn from(err: FormatHeaderError) -> WriteNpyError {
+        WriteNpyError::FormatHeader(err)
     }
 }
 
@@ -140,41 +157,61 @@ pub trait ReadableElement: Sized {
     ) -> Result<Vec<Self>, Self::Error>;
 }
 
-quick_error! {
-    /// An error reading a `.npy` file.
-    #[derive(Debug)]
-    pub enum ReadNpyError {
-        /// An error caused by reading the file header.
-        Header(err: HeaderReadError) {
-            description("error reading header")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
-            from()
+/// An error reading a `.npy` file.
+#[derive(Debug)]
+pub enum ReadNpyError {
+    /// An error caused by reading the file header.
+    Header(HeaderReadError),
+    /// An error issued by the element type when reading the data.
+    ///
+    /// Among other things, causes can include:
+    ///
+    /// * if the header type description does not match the element type
+    /// * if the reader has fewer elements than specified in the header
+    /// * if the reader has extra bytes after reading the data
+    ReadableElement(Box<dyn Error + Send + Sync>),
+    /// Overflow while computing the length of the array from the shape
+    /// described in the file header.
+    LengthOverflow,
+    /// An error caused by incorrect `Dimension` type.
+    WrongNdim(Option<usize>, usize),
+}
+
+impl Error for ReadNpyError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            ReadNpyError::Header(err) => Some(err),
+            ReadNpyError::ReadableElement(err) => Some(&**err),
+            ReadNpyError::LengthOverflow => None,
+            ReadNpyError::WrongNdim(_, _) => None,
         }
-        /// An error issued by the element type when reading the data.
-        ///
-        /// Among other things, causes can include:
-        ///
-        /// * if the header type description does not match the element type
-        /// * if the reader has fewer elements than specified in the header
-        /// * if the reader has extra bytes after reading the data
-        ReadableElement(err: Box<Error + Send + Sync>) {
-            description("ReadableElement error")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(&**err)
-            from(ReadPrimitiveError)
+    }
+}
+
+impl fmt::Display for ReadNpyError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ReadNpyError::Header(err) => write!(f, "error reading header: {}", err),
+            ReadNpyError::ReadableElement(err) => write!(f, "ReadableElement error: {}", err),
+            ReadNpyError::LengthOverflow => write!(f, "overflow computing length from shape"),
+            ReadNpyError::WrongNdim(expected, actual) => write!(
+                f,
+                "ndim {} of array did not match Dimension type with NDIM = {:?}",
+                actual, expected
+            ),
         }
-        /// Overflow while computing the length of the array from the shape
-        /// described in the file header.
-        LengthOverflow {
-            description("overflow computing length from shape")
-            display(x) -> ("{}", x.description())
-        }
-        /// An error caused by incorrect `Dimension` type.
-        WrongNdim(expected: Option<usize>, actual: usize) {
-            description("ndim of array did not match specified Dimension type")
-            display(x) -> ("ndim {} of array did not match Dimension type with NDIM = {:?}", actual, expected)
-        }
+    }
+}
+
+impl From<HeaderReadError> for ReadNpyError {
+    fn from(err: HeaderReadError) -> ReadNpyError {
+        ReadNpyError::Header(err)
+    }
+}
+
+impl From<ReadPrimitiveError> for ReadNpyError {
+    fn from(err: ReadPrimitiveError) -> ReadNpyError {
+        ReadNpyError::ReadableElement(Box::new(err))
     }
 }
 
@@ -276,34 +313,47 @@ macro_rules! impl_writable_primitive {
     };
 }
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum ReadPrimitiveError {
-        /// The type descriptor does not match the element type.
-        BadDescriptor(desc: PyValue) {
-            description("bad descriptor for this type")
-            display(x) -> ("{}: {}", x.description(), desc)
+/// An error reading a primitive element.
+#[derive(Debug)]
+pub enum ReadPrimitiveError {
+    /// The type descriptor does not match the element type.
+    BadDescriptor(PyValue),
+    /// One of the values of the elements in the data is invalid for the
+    /// element type.
+    BadValue,
+    /// The file does not contain all the data described in the header.
+    MissingData,
+    /// Extra bytes are present between the end of the data and the end of the
+    /// file.
+    ExtraBytes(usize),
+    /// An error caused by I/O.
+    Io(io::Error),
+}
+
+impl Error for ReadPrimitiveError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            ReadPrimitiveError::BadDescriptor(_) => None,
+            ReadPrimitiveError::BadValue => None,
+            ReadPrimitiveError::MissingData => None,
+            ReadPrimitiveError::ExtraBytes(_) => None,
+            ReadPrimitiveError::Io(err) => Some(err),
         }
-        /// One of the values of the elements in the data is invalid for the
-        /// element type.
-        BadValue {
-            description("invalid value for this type")
-        }
-        /// The file does not contain all the data described in the header.
-        MissingData {
-            description("reached EOF before reading all data")
-        }
-        /// Extra bytes are present between the end of the data and the end of
-        /// the file.
-        ExtraBytes(num_extra_bytes: usize) {
-            description("file had extra bytes before EOF")
-            display(x) -> ("file had {} extra bytes before EOF", num_extra_bytes)
-        }
-        /// I/O error.
-        Io(err: io::Error) {
-            description("I/O error")
-            display(x) -> ("{}: {}", x.description(), err)
-            cause(err)
+    }
+}
+
+impl fmt::Display for ReadPrimitiveError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ReadPrimitiveError::BadDescriptor(desc) => {
+                write!(f, "bad descriptor for this type: {}", desc)
+            }
+            ReadPrimitiveError::BadValue => write!(f, "invalid value for this type"),
+            ReadPrimitiveError::MissingData => write!(f, "reached EOF before reading all data"),
+            ReadPrimitiveError::ExtraBytes(num_extra_bytes) => {
+                write!(f, "file had {} extra bytes before EOF", num_extra_bytes)
+            }
+            ReadPrimitiveError::Io(err) => write!(f, "I/O error: {}", err),
         }
     }
 }
