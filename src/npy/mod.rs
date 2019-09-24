@@ -1,6 +1,8 @@
 pub mod header;
 
-use self::header::{FormatHeaderError, Header, HeaderParseError, HeaderReadError};
+use self::header::{
+    FormatHeaderError, Header, HeaderParseError, HeaderReadError, HeaderWriteError,
+};
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 use ndarray::prelude::*;
 use ndarray::{Data, DataOwned, IntoDimension};
@@ -96,6 +98,15 @@ impl From<io::Error> for WriteNpyError {
     }
 }
 
+impl From<HeaderWriteError> for WriteNpyError {
+    fn from(err: HeaderWriteError) -> WriteNpyError {
+        match err {
+            HeaderWriteError::Io(err) => WriteNpyError::Io(err),
+            HeaderWriteError::Format(err) => WriteNpyError::FormatHeader(err),
+        }
+    }
+}
+
 impl From<FormatHeaderError> for WriteNpyError {
     fn from(err: FormatHeaderError) -> WriteNpyError {
         WriteNpyError::FormatHeader(err)
@@ -150,13 +161,12 @@ where
 {
     fn write_npy<W: io::Write>(&self, mut writer: W) -> Result<(), WriteNpyError> {
         let write_contiguous = |mut writer: W, fortran_order: bool| {
-            let header = Header {
+            Header {
                 type_descriptor: A::type_descriptor(),
                 fortran_order,
                 shape: self.shape().to_owned(),
             }
-            .to_bytes()?;
-            writer.write_all(&header)?;
+            .write(&mut writer)?;
             A::write_slice(self.as_slice_memory_order().unwrap(), &mut writer)?;
             Ok(())
         };
@@ -165,14 +175,12 @@ where
         } else if self.view().reversed_axes().is_standard_layout() {
             write_contiguous(writer, true)
         } else {
-            writer.write_all(
-                &Header {
-                    type_descriptor: A::type_descriptor(),
-                    fortran_order: false,
-                    shape: self.shape().to_owned(),
-                }
-                .to_bytes()?,
-            )?;
+            Header {
+                type_descriptor: A::type_descriptor(),
+                fortran_order: false,
+                shape: self.shape().to_owned(),
+            }
+            .write(&mut writer)?;
             for elem in self.iter() {
                 elem.write(&mut writer)?;
             }

@@ -203,6 +203,42 @@ impl From<PyValueFormatError> for FormatHeaderError {
     }
 }
 
+#[derive(Debug)]
+pub enum HeaderWriteError {
+    Io(io::Error),
+    Format(FormatHeaderError),
+}
+
+impl Error for HeaderWriteError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            HeaderWriteError::Io(err) => Some(err),
+            HeaderWriteError::Format(err) => Some(err),
+        }
+    }
+}
+
+impl fmt::Display for HeaderWriteError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            HeaderWriteError::Io(err) => write!(f, "I/O error: {}", err),
+            HeaderWriteError::Format(err) => write!(f, "error formatting header: {}", err),
+        }
+    }
+}
+
+impl From<io::Error> for HeaderWriteError {
+    fn from(err: io::Error) -> HeaderWriteError {
+        HeaderWriteError::Io(err)
+    }
+}
+
+impl From<FormatHeaderError> for HeaderWriteError {
+    fn from(err: FormatHeaderError) -> HeaderWriteError {
+        HeaderWriteError::Format(err)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Header {
     pub type_descriptor: PyValue,
@@ -368,5 +404,11 @@ impl Header {
         debug_assert_eq!(out.len() % 16, 0);
 
         Ok(out)
+    }
+
+    pub fn write<W: io::Write>(&self, mut writer: W) -> Result<(), HeaderWriteError> {
+        let bytes = self.to_bytes()?;
+        writer.write_all(&bytes)?;
+        Ok(())
     }
 }
