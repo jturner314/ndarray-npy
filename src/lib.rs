@@ -5,10 +5,14 @@
 //! [`.npy`]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.lib.format.html
 //! [`.npz`]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.savez.html
 //!
-//! See [`ReadNpyExt`] and [`WriteNpyExt`] for reading/writing `.npy` files.
+//! See the [`ReadNpyExt`] and [`WriteNpyExt`] extension traits or the
+//! [`read_npy`] and [`write_npy`] convenience functions for reading/writing
+//! `.npy` files.
 //!
 //! [`ReadNpyExt`]: trait.ReadNpyExt.html
 //! [`WriteNpyExt`]: trait.WriteNpyExt.html
+//! [`read_npy`]: fn.read_npy.html
+//! [`write_npy`]: fn.write_npy.html
 //!
 //! See [`NpzReader`] and [`NpzWriter`] for reading/writing `.npz` files.
 //!
@@ -39,8 +43,8 @@ mod npy;
 mod npz;
 
 pub use crate::npy::{
-    ReadDataError, ReadNpyError, ReadNpyExt, ReadableElement, WritableElement, WriteDataError,
-    WriteNpyError, WriteNpyExt,
+    read_npy, write_npy, ReadDataError, ReadNpyError, ReadNpyExt, ReadableElement, WritableElement,
+    WriteDataError, WriteNpyError, WriteNpyExt,
 };
 #[cfg(feature = "npz")]
 pub use crate::npz::{NpzReader, NpzWriter, ReadNpzError, WriteNpzError};

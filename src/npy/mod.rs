@@ -12,6 +12,57 @@ use std::fmt;
 use std::io;
 use std::mem;
 
+/// Read an `.npy` file located at the specified path.
+///
+/// This is a convience function for using `File::open` followed by
+/// [`ReadNpyExt::read_npy`](trait.ReadNpyExt.html#tymethod.read_npy).
+///
+/// # Example
+///
+/// ```
+/// use ndarray::Array2;
+/// use ndarray_npy::read_npy;
+/// # use ndarray_npy::ReadNpyError;
+///
+/// let arr: Array2<i32> = read_npy("array.npy")?;
+/// # println!("arr = {}", arr);
+/// # Ok::<_, ReadNpyError>(())
+/// ```
+pub fn read_npy<P, T>(path: P) -> Result<T, ReadNpyError>
+where
+    P: AsRef<std::path::Path>,
+    T: ReadNpyExt,
+{
+    T::read_npy(std::fs::File::open(path)?)
+}
+
+/// Writes an array to an `.npy` file at the specified path.
+///
+/// This function will create the file if it does not exist, or overwrite it if
+/// it does.
+///
+/// This is a convenience function for using `File::create` followed by
+/// [`WriteNpyExt::write_npy`](trait.WriteNpyExt.html#tymethod.write_npy).
+///
+/// # Example
+///
+/// ```
+/// use ndarray::array;
+/// use ndarray_npy::write_npy;
+/// # use ndarray_npy::WriteNpyError;
+///
+/// let arr = array![[1, 2, 3], [4, 5, 6]];
+/// write_npy("array.npy", arr)?;
+/// # Ok::<_, WriteNpyError>(())
+/// ```
+pub fn write_npy<P, T>(path: P, array: T) -> Result<(), WriteNpyError>
+where
+    P: AsRef<std::path::Path>,
+    T: WriteNpyExt,
+{
+    array.write_npy(std::fs::File::create(path)?)
+}
+
 /// An error writing array data.
 #[derive(Debug)]
 pub enum WriteDataError {
