@@ -12,7 +12,7 @@ edition = "2018"
 
 [dependencies]
 byteorder = "1.3.2"
-ndarray = "0.12"
+ndarray = "0.13"
 num-traits = "0.2"
 py_literal = "0.2.1"
 zip = { version = "0.5", default-features = false, optional = true }
