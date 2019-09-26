@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate ndarray;
 extern crate ndarray_npy;
 
@@ -13,7 +12,7 @@ fn write_example() -> Result<(), WriteNpyError> {
     Ok(())
 }
 
-fn read_example() -> Result<(), Box<std::error::Error>> {
+fn read_example() -> Result<(), Box<dyn std::error::Error>> {
     let reader = File::open("array.npy")?;
     let arr = Array2::<i32>::read_npy(reader)?;
     println!("arr =\n{}", arr);
