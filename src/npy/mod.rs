@@ -1,7 +1,7 @@
 pub mod header;
 
 use self::header::{
-    FormatHeaderError, Header, HeaderParseError, HeaderReadError, HeaderWriteError,
+    FormatHeaderError, Header, ParseHeaderError, ReadHeaderError, WriteHeaderError,
 };
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 use ndarray::prelude::*;
@@ -94,11 +94,11 @@ impl From<io::Error> for WriteNpyError {
     }
 }
 
-impl From<HeaderWriteError> for WriteNpyError {
-    fn from(err: HeaderWriteError) -> WriteNpyError {
+impl From<WriteHeaderError> for WriteNpyError {
+    fn from(err: WriteHeaderError) -> WriteNpyError {
         match err {
-            HeaderWriteError::Io(err) => WriteNpyError::Io(err),
-            HeaderWriteError::Format(err) => WriteNpyError::FormatHeader(err),
+            WriteHeaderError::Io(err) => WriteNpyError::Io(err),
+            WriteHeaderError::Format(err) => WriteNpyError::FormatHeader(err),
         }
     }
 }
@@ -262,7 +262,7 @@ pub enum ReadNpyError {
     /// An error caused by I/O.
     Io(io::Error),
     /// An error parsing the file header.
-    ParseHeader(HeaderParseError),
+    ParseHeader(ParseHeaderError),
     /// An error parsing the data.
     ParseData(Box<dyn Error + Send + Sync + 'static>),
     /// Overflow while computing the length of the array from the shape
@@ -323,17 +323,17 @@ impl From<io::Error> for ReadNpyError {
     }
 }
 
-impl From<HeaderReadError> for ReadNpyError {
-    fn from(err: HeaderReadError) -> ReadNpyError {
+impl From<ReadHeaderError> for ReadNpyError {
+    fn from(err: ReadHeaderError) -> ReadNpyError {
         match err {
-            HeaderReadError::Io(err) => ReadNpyError::Io(err),
-            HeaderReadError::Parse(err) => ReadNpyError::ParseHeader(err),
+            ReadHeaderError::Io(err) => ReadNpyError::Io(err),
+            ReadHeaderError::Parse(err) => ReadNpyError::ParseHeader(err),
         }
     }
 }
 
-impl From<HeaderParseError> for ReadNpyError {
-    fn from(err: HeaderParseError) -> ReadNpyError {
+impl From<ParseHeaderError> for ReadNpyError {
+    fn from(err: ParseHeaderError) -> ReadNpyError {
         ReadNpyError::ParseHeader(err)
     }
 }
