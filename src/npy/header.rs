@@ -313,9 +313,9 @@ impl Header {
             }
             match (type_descriptor, fortran_order, shape) {
                 (Some(type_descriptor), Some(fortran_order), Some(shape)) => Ok(Header {
-                    type_descriptor: type_descriptor,
-                    fortran_order: fortran_order,
-                    shape: shape,
+                    type_descriptor,
+                    fortran_order,
+                    shape,
                 }),
                 (None, _, _) => Err(ParseHeaderError::MissingKey("descr".to_owned())),
                 (_, None, _) => Err(ParseHeaderError::MissingKey("fortran_order".to_owned())),
@@ -331,7 +331,7 @@ impl Header {
         let mut buf = vec![0; MAGIC_STRING.len()];
         reader.read_exact(&mut buf)?;
         if buf != MAGIC_STRING {
-            return Err(ParseHeaderError::MagicString)?;
+            return Err(ParseHeaderError::MagicString.into());
         }
 
         // Get version number.
@@ -347,7 +347,7 @@ impl Header {
         reader.read_exact(&mut buf)?;
         let without_newline = match buf.split_last() {
             Some((&b'\n', rest)) => rest,
-            Some(_) | None => Err(ParseHeaderError::MissingNewline)?,
+            Some(_) | None => return Err(ParseHeaderError::MissingNewline.into()),
         };
         let header_str = match version {
             Version::V1_0 | Version::V2_0 => {
@@ -355,18 +355,15 @@ impl Header {
                     // ASCII strings are always valid UTF-8.
                     unsafe { std::str::from_utf8_unchecked(without_newline) }
                 } else {
-                    return Err(ParseHeaderError::NonAscii)?;
+                    return Err(ParseHeaderError::NonAscii.into());
                 }
             }
             Version::V3_0 => {
-                std::str::from_utf8(without_newline).map_err(|err| ParseHeaderError::from(err))?
+                std::str::from_utf8(without_newline).map_err(ParseHeaderError::from)?
             }
         };
-        Ok(Header::from_py_value(
-            header_str
-                .parse()
-                .map_err(|err| ParseHeaderError::from(err))?,
-        )?)
+        let header_dict: PyValue = header_str.parse().map_err(ParseHeaderError::from)?;
+        Ok(Header::from_py_value(header_dict)?)
     }
 
     fn to_py_value(&self) -> PyValue {
