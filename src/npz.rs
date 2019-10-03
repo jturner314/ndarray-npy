@@ -54,11 +54,7 @@ impl From<WriteNpyError> for WriteNpzError {
 /// # Example
 ///
 /// ```
-/// #[macro_use]
-/// extern crate ndarray;
-/// extern crate ndarray_npy;
-///
-/// use ndarray::prelude::*;
+/// use ndarray::{array, Array1, Array2};
 /// use ndarray_npy::NpzWriter;
 /// use std::fs::File;
 ///
@@ -161,11 +157,7 @@ impl From<ReadNpyError> for ReadNpzError {
 /// # Example
 ///
 /// ```
-/// #[macro_use]
-/// extern crate ndarray;
-/// extern crate ndarray_npy;
-///
-/// use ndarray::prelude::*;
+/// use ndarray::{Array1, Array2};
 /// use ndarray_npy::NpzReader;
 /// use std::fs::File;
 ///

@@ -11,7 +11,7 @@ use std::io;
 const MAGIC_STRING: &[u8] = b"\x93NUMPY";
 
 #[derive(Debug)]
-pub enum HeaderParseError {
+pub enum ParseHeaderError {
     MagicString,
     Version { major: u8, minor: u8 },
     NonAscii,
@@ -23,9 +23,9 @@ pub enum HeaderParseError {
     MissingNewline,
 }
 
-impl Error for HeaderParseError {
+impl Error for ParseHeaderError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        use HeaderParseError::*;
+        use ParseHeaderError::*;
         match self {
             MagicString => None,
             Version { .. } => None,
@@ -40,9 +40,9 @@ impl Error for HeaderParseError {
     }
 }
 
-impl fmt::Display for HeaderParseError {
+impl fmt::Display for ParseHeaderError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use HeaderParseError::*;
+        use ParseHeaderError::*;
         match self {
             MagicString => write!(f, "start does not match magic string"),
             Version { major, minor } => write!(f, "unknown version number: {}.{}", major, minor),
@@ -57,51 +57,51 @@ impl fmt::Display for HeaderParseError {
     }
 }
 
-impl From<std::str::Utf8Error> for HeaderParseError {
-    fn from(_: std::str::Utf8Error) -> HeaderParseError {
-        HeaderParseError::NonAscii
+impl From<std::str::Utf8Error> for ParseHeaderError {
+    fn from(_: std::str::Utf8Error) -> ParseHeaderError {
+        ParseHeaderError::NonAscii
     }
 }
 
-impl From<PyValueParseError> for HeaderParseError {
-    fn from(err: PyValueParseError) -> HeaderParseError {
-        HeaderParseError::DictParse(err)
+impl From<PyValueParseError> for ParseHeaderError {
+    fn from(err: PyValueParseError) -> ParseHeaderError {
+        ParseHeaderError::DictParse(err)
     }
 }
 
 #[derive(Debug)]
-pub enum HeaderReadError {
+pub enum ReadHeaderError {
     Io(io::Error),
-    Parse(HeaderParseError),
+    Parse(ParseHeaderError),
 }
 
-impl Error for HeaderReadError {
+impl Error for ReadHeaderError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            HeaderReadError::Io(err) => Some(err),
-            HeaderReadError::Parse(err) => Some(err),
+            ReadHeaderError::Io(err) => Some(err),
+            ReadHeaderError::Parse(err) => Some(err),
         }
     }
 }
 
-impl fmt::Display for HeaderReadError {
+impl fmt::Display for ReadHeaderError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            HeaderReadError::Io(err) => write!(f, "I/O error: {}", err),
-            HeaderReadError::Parse(err) => write!(f, "error parsing header: {}", err),
+            ReadHeaderError::Io(err) => write!(f, "I/O error: {}", err),
+            ReadHeaderError::Parse(err) => write!(f, "error parsing header: {}", err),
         }
     }
 }
 
-impl From<io::Error> for HeaderReadError {
-    fn from(err: io::Error) -> HeaderReadError {
-        HeaderReadError::Io(err)
+impl From<io::Error> for ReadHeaderError {
+    fn from(err: io::Error) -> ReadHeaderError {
+        ReadHeaderError::Io(err)
     }
 }
 
-impl From<HeaderParseError> for HeaderReadError {
-    fn from(err: HeaderParseError) -> HeaderReadError {
-        HeaderReadError::Parse(err)
+impl From<ParseHeaderError> for ReadHeaderError {
+    fn from(err: ParseHeaderError) -> ReadHeaderError {
+        ReadHeaderError::Parse(err)
     }
 }
 
@@ -116,12 +116,12 @@ impl Version {
     /// byte for minor version).
     const VERSION_NUM_BYTES: usize = 2;
 
-    fn from_bytes(bytes: &[u8]) -> Result<Self, HeaderParseError> {
+    fn from_bytes(bytes: &[u8]) -> Result<Self, ParseHeaderError> {
         debug_assert_eq!(bytes.len(), Self::VERSION_NUM_BYTES);
         match (bytes[0], bytes[1]) {
             (0x01, 0x00) => Ok(Version::V1_0),
             (0x02, 0x00) => Ok(Version::V2_0),
-            (major, minor) => Err(HeaderParseError::Version { major, minor }),
+            (major, minor) => Err(ParseHeaderError::Version { major, minor }),
         }
     }
 
@@ -203,6 +203,42 @@ impl From<PyValueFormatError> for FormatHeaderError {
     }
 }
 
+#[derive(Debug)]
+pub enum WriteHeaderError {
+    Io(io::Error),
+    Format(FormatHeaderError),
+}
+
+impl Error for WriteHeaderError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            WriteHeaderError::Io(err) => Some(err),
+            WriteHeaderError::Format(err) => Some(err),
+        }
+    }
+}
+
+impl fmt::Display for WriteHeaderError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            WriteHeaderError::Io(err) => write!(f, "I/O error: {}", err),
+            WriteHeaderError::Format(err) => write!(f, "error formatting header: {}", err),
+        }
+    }
+}
+
+impl From<io::Error> for WriteHeaderError {
+    fn from(err: io::Error) -> WriteHeaderError {
+        WriteHeaderError::Io(err)
+    }
+}
+
+impl From<FormatHeaderError> for WriteHeaderError {
+    fn from(err: FormatHeaderError) -> WriteHeaderError {
+        WriteHeaderError::Format(err)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Header {
     pub type_descriptor: PyValue,
@@ -217,7 +253,7 @@ impl fmt::Display for Header {
 }
 
 impl Header {
-    fn from_py_value(value: PyValue) -> Result<Self, HeaderParseError> {
+    fn from_py_value(value: PyValue) -> Result<Self, ParseHeaderError> {
         if let PyValue::Dict(dict) = value {
             let mut type_descriptor: Option<PyValue> = None;
             let mut fortran_order: Option<bool> = None;
@@ -231,7 +267,7 @@ impl Header {
                         if let PyValue::Boolean(b) = value {
                             fortran_order = Some(b);
                         } else {
-                            return Err(HeaderParseError::IllegalValue {
+                            return Err(ParseHeaderError::IllegalValue {
                                 key: "fortran_order".to_owned(),
                                 value,
                             });
@@ -248,13 +284,13 @@ impl Header {
                         if let Some(s) = parse_shape(&value) {
                             shape = Some(s);
                         } else {
-                            return Err(HeaderParseError::IllegalValue {
+                            return Err(ParseHeaderError::IllegalValue {
                                 key: "shape".to_owned(),
                                 value,
                             });
                         }
                     }
-                    k => return Err(HeaderParseError::UnknownKey(k)),
+                    k => return Err(ParseHeaderError::UnknownKey(k)),
                 }
             }
             match (type_descriptor, fortran_order, shape) {
@@ -263,21 +299,21 @@ impl Header {
                     fortran_order: fortran_order,
                     shape: shape,
                 }),
-                (None, _, _) => Err(HeaderParseError::MissingKey("descr".to_owned())),
-                (_, None, _) => Err(HeaderParseError::MissingKey("fortran_order".to_owned())),
-                (_, _, None) => Err(HeaderParseError::MissingKey("shaper".to_owned())),
+                (None, _, _) => Err(ParseHeaderError::MissingKey("descr".to_owned())),
+                (_, None, _) => Err(ParseHeaderError::MissingKey("fortran_order".to_owned())),
+                (_, _, None) => Err(ParseHeaderError::MissingKey("shaper".to_owned())),
             }
         } else {
-            Err(HeaderParseError::MetaNotDict(value))
+            Err(ParseHeaderError::MetaNotDict(value))
         }
     }
 
-    pub fn from_reader<R: io::Read>(mut reader: R) -> Result<Self, HeaderReadError> {
+    pub fn from_reader<R: io::Read>(mut reader: R) -> Result<Self, ReadHeaderError> {
         // Check for magic string.
         let mut buf = vec![0; MAGIC_STRING.len()];
         reader.read_exact(&mut buf)?;
         if buf != MAGIC_STRING {
-            return Err(HeaderParseError::MagicString)?;
+            return Err(ParseHeaderError::MagicString)?;
         }
 
         // Get version number.
@@ -293,17 +329,17 @@ impl Header {
         reader.read_exact(&mut buf)?;
         let without_newline = match buf.split_last() {
             Some((&b'\n', rest)) => rest,
-            Some(_) | None => Err(HeaderParseError::MissingNewline)?,
+            Some(_) | None => Err(ParseHeaderError::MissingNewline)?,
         };
         let header_str = if without_newline.is_ascii() {
             unsafe { std::str::from_utf8_unchecked(without_newline) }
         } else {
-            return Err(HeaderParseError::NonAscii)?;
+            return Err(ParseHeaderError::NonAscii)?;
         };
         Ok(Header::from_py_value(
             header_str
                 .parse()
-                .map_err(|err| HeaderParseError::from(err))?,
+                .map_err(|err| ParseHeaderError::from(err))?,
         )?)
     }
 
@@ -368,5 +404,11 @@ impl Header {
         debug_assert_eq!(out.len() % 16, 0);
 
         Ok(out)
+    }
+
+    pub fn write<W: io::Write>(&self, mut writer: W) -> Result<(), WriteHeaderError> {
+        let bytes = self.to_bytes()?;
+        writer.write_all(&bytes)?;
+        Ok(())
     }
 }

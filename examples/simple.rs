@@ -1,8 +1,5 @@
-extern crate ndarray;
-extern crate ndarray_npy;
-
-use ndarray::prelude::*;
-use ndarray_npy::{ReadNpyExt, WriteNpyError, WriteNpyExt};
+use ndarray::{array, Array2};
+use ndarray_npy::{ReadNpyError, ReadNpyExt, WriteNpyError, WriteNpyExt};
 use std::fs::File;
 
 fn write_example() -> Result<(), WriteNpyError> {
@@ -12,7 +9,7 @@ fn write_example() -> Result<(), WriteNpyError> {
     Ok(())
 }
 
-fn read_example() -> Result<(), Box<dyn std::error::Error>> {
+fn read_example() -> Result<(), ReadNpyError> {
     let reader = File::open("array.npy")?;
     let arr = Array2::<i32>::read_npy(reader)?;
     println!("arr =\n{}", arr);
