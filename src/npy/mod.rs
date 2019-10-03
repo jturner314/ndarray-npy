@@ -19,7 +19,7 @@ use std::mem;
 ///
 /// # Example
 ///
-/// ```
+/// ```no_run
 /// use ndarray::Array2;
 /// use ndarray_npy::read_npy;
 /// # use ndarray_npy::ReadNpyError;
@@ -46,7 +46,7 @@ where
 ///
 /// # Example
 ///
-/// ```
+/// ```no_run
 /// use ndarray::array;
 /// use ndarray_npy::write_npy;
 /// # use ndarray_npy::WriteNpyError;
@@ -173,7 +173,7 @@ impl From<WriteDataError> for WriteNpyError {
 ///
 /// # Example
 ///
-/// ```
+/// ```no_run
 /// use ndarray::{array, Array2};
 /// use ndarray_npy::WriteNpyExt;
 /// use std::fs::File;
@@ -401,7 +401,7 @@ impl From<ReadDataError> for ReadNpyError {
 ///
 /// # Example
 ///
-/// ```
+/// ```no_run
 /// use ndarray::Array2;
 /// use ndarray_npy::ReadNpyExt;
 /// use std::fs::File;
