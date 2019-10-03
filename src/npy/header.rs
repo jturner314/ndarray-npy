@@ -13,11 +13,23 @@ const MAGIC_STRING: &[u8] = b"\x93NUMPY";
 #[derive(Debug)]
 pub enum ParseHeaderError {
     MagicString,
-    Version { major: u8, minor: u8 },
+    Version {
+        major: u8,
+        minor: u8,
+    },
+    /// Indicates that the array format string contains non-ASCII characters.
+    /// This is an error for .npy format versions 1.0 and 2.0.
     NonAscii,
+    /// Error parsing the array format string as UTF-8. This does not apply to
+    /// .npy format versions 1.0 and 2.0, which require the array format string
+    /// to be ASCII.
+    Utf8Parse(std::str::Utf8Error),
     UnknownKey(PyValue),
     MissingKey(String),
-    IllegalValue { key: String, value: PyValue },
+    IllegalValue {
+        key: String,
+        value: PyValue,
+    },
     DictParse(PyValueParseError),
     MetaNotDict(PyValue),
     MissingNewline,
@@ -30,6 +42,7 @@ impl Error for ParseHeaderError {
             MagicString => None,
             Version { .. } => None,
             NonAscii => None,
+            Utf8Parse(err) => Some(err),
             UnknownKey(_) => None,
             MissingKey(_) => None,
             IllegalValue { .. } => None,
@@ -46,7 +59,8 @@ impl fmt::Display for ParseHeaderError {
         match self {
             MagicString => write!(f, "start does not match magic string"),
             Version { major, minor } => write!(f, "unknown version number: {}.{}", major, minor),
-            NonAscii => write!(f, "non-ascii in array format string"),
+            NonAscii => write!(f, "non-ascii in array format string; this is not supported in .npy format versions 1.0 and 2.0"),
+            Utf8Parse(err) => write!(f, "error parsing array format string as UTF-8: {}", err),
             UnknownKey(key) => write!(f, "unknown key: {}", key),
             MissingKey(key) => write!(f, "missing key: {}", key),
             IllegalValue { key, value } => write!(f, "illegal value for key {}: {}", key, value),
@@ -58,8 +72,8 @@ impl fmt::Display for ParseHeaderError {
 }
 
 impl From<std::str::Utf8Error> for ParseHeaderError {
-    fn from(_: std::str::Utf8Error) -> ParseHeaderError {
-        ParseHeaderError::NonAscii
+    fn from(err: std::str::Utf8Error) -> ParseHeaderError {
+        ParseHeaderError::Utf8Parse(err)
     }
 }
 
@@ -109,6 +123,7 @@ impl From<ParseHeaderError> for ReadHeaderError {
 enum Version {
     V1_0,
     V2_0,
+    V3_0,
 }
 
 impl Version {
@@ -121,6 +136,7 @@ impl Version {
         match (bytes[0], bytes[1]) {
             (0x01, 0x00) => Ok(Version::V1_0),
             (0x02, 0x00) => Ok(Version::V2_0),
+            (0x03, 0x00) => Ok(Version::V3_0),
             (major, minor) => Err(ParseHeaderError::Version { major, minor }),
         }
     }
@@ -130,6 +146,7 @@ impl Version {
         match *self {
             Version::V1_0 => 1,
             Version::V2_0 => 2,
+            Version::V3_0 => 3,
         }
     }
 
@@ -138,6 +155,7 @@ impl Version {
         match *self {
             Version::V1_0 => 0,
             Version::V2_0 => 0,
+            Version::V3_0 => 0,
         }
     }
 
@@ -145,7 +163,7 @@ impl Version {
     fn header_len_num_bytes(&self) -> usize {
         match *self {
             Version::V1_0 => 2,
-            Version::V2_0 => 4,
+            Version::V2_0 | Version::V3_0 => 4,
         }
     }
 
@@ -155,7 +173,7 @@ impl Version {
         reader.read_exact(&mut buf[..self.header_len_num_bytes()])?;
         match *self {
             Version::V1_0 => Ok(LittleEndian::read_u16(&buf) as usize),
-            Version::V2_0 => Ok(LittleEndian::read_u32(&buf) as usize),
+            Version::V2_0 | Version::V3_0 => Ok(LittleEndian::read_u32(&buf) as usize),
         }
     }
 
@@ -167,7 +185,7 @@ impl Version {
                 assert!(header_len <= std::u16::MAX as usize);
                 LittleEndian::write_u16(&mut out, header_len as u16);
             }
-            Version::V2_0 => {
+            Version::V2_0 | Version::V3_0 => {
                 assert!(header_len <= std::u32::MAX as usize);
                 LittleEndian::write_u32(&mut out, header_len as u32);
             }
@@ -331,10 +349,18 @@ impl Header {
             Some((&b'\n', rest)) => rest,
             Some(_) | None => Err(ParseHeaderError::MissingNewline)?,
         };
-        let header_str = if without_newline.is_ascii() {
-            unsafe { std::str::from_utf8_unchecked(without_newline) }
-        } else {
-            return Err(ParseHeaderError::NonAscii)?;
+        let header_str = match version {
+            Version::V1_0 | Version::V2_0 => {
+                if without_newline.is_ascii() {
+                    // ASCII strings are always valid UTF-8.
+                    unsafe { std::str::from_utf8_unchecked(without_newline) }
+                } else {
+                    return Err(ParseHeaderError::NonAscii)?;
+                }
+            }
+            Version::V3_0 => {
+                std::str::from_utf8(without_newline).map_err(|err| ParseHeaderError::from(err))?
+            }
         };
         Ok(Header::from_py_value(
             header_str
