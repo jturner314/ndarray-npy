@@ -53,7 +53,7 @@ impl From<WriteNpyError> for WriteNpzError {
 ///
 /// # Example
 ///
-/// ```
+/// ```no_run
 /// use ndarray::{array, Array1, Array2};
 /// use ndarray_npy::NpzWriter;
 /// use std::fs::File;
@@ -153,7 +153,7 @@ impl From<ReadNpyError> for ReadNpzError {
 ///
 /// # Example
 ///
-/// ```
+/// ```no_run
 /// use ndarray::{Array1, Array2};
 /// use ndarray_npy::NpzReader;
 /// use std::fs::File;
@@ -173,6 +173,11 @@ impl<R: Read + Seek> NpzReader<R> {
         Ok(NpzReader {
             zip: ZipArchive::new(reader)?,
         })
+    }
+
+    /// Returns `true` iff the `.npz` file doesn't contain any arrays.
+    pub fn is_empty(&self) -> bool {
+        self.zip.len() == 0
     }
 
     /// Returns the number of arrays in the `.npz` file.
