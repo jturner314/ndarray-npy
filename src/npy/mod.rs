@@ -12,38 +12,36 @@ use std::fmt;
 use std::io;
 use std::mem;
 
-/// An error writing array elements.
+/// An error writing array data.
 #[derive(Debug)]
-pub enum WriteElementsError {
+pub enum WriteDataError {
     /// An error caused by I/O.
     Io(io::Error),
-    /// An error formatting the elements.
-    FormatElements(Box<dyn Error + Send + Sync + 'static>),
+    /// An error formatting the data.
+    FormatData(Box<dyn Error + Send + Sync + 'static>),
 }
 
-impl Error for WriteElementsError {
+impl Error for WriteDataError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            WriteElementsError::Io(err) => Some(err),
-            WriteElementsError::FormatElements(err) => Some(&**err),
+            WriteDataError::Io(err) => Some(err),
+            WriteDataError::FormatData(err) => Some(&**err),
         }
     }
 }
 
-impl fmt::Display for WriteElementsError {
+impl fmt::Display for WriteDataError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            WriteElementsError::Io(err) => write!(f, "I/O error: {}", err),
-            WriteElementsError::FormatElements(err) => {
-                write!(f, "error formatting data elements: {}", err)
-            }
+            WriteDataError::Io(err) => write!(f, "I/O error: {}", err),
+            WriteDataError::FormatData(err) => write!(f, "error formatting data: {}", err),
         }
     }
 }
 
-impl From<io::Error> for WriteElementsError {
-    fn from(err: io::Error) -> WriteElementsError {
-        WriteElementsError::Io(err)
+impl From<io::Error> for WriteDataError {
+    fn from(err: io::Error) -> WriteDataError {
+        WriteDataError::Io(err)
     }
 }
 
@@ -53,10 +51,10 @@ pub unsafe trait WritableElement: Sized {
     fn type_descriptor() -> PyValue;
 
     /// Writes a single instance of `Self` to the writer.
-    fn write<W: io::Write>(&self, writer: W) -> Result<(), WriteElementsError>;
+    fn write<W: io::Write>(&self, writer: W) -> Result<(), WriteDataError>;
 
     /// Writes a slice of `Self` to the writer.
-    fn write_slice<W: io::Write>(slice: &[Self], writer: W) -> Result<(), WriteElementsError>;
+    fn write_slice<W: io::Write>(slice: &[Self], writer: W) -> Result<(), WriteDataError>;
 }
 
 /// An error writing a `.npy` file.
@@ -66,8 +64,8 @@ pub enum WriteNpyError {
     Io(io::Error),
     /// An error formatting the header.
     FormatHeader(FormatHeaderError),
-    /// An error formatting the data elements.
-    FormatElements(Box<dyn Error + Send + Sync + 'static>),
+    /// An error formatting the data.
+    FormatData(Box<dyn Error + Send + Sync + 'static>),
 }
 
 impl Error for WriteNpyError {
@@ -75,7 +73,7 @@ impl Error for WriteNpyError {
         match self {
             WriteNpyError::Io(err) => Some(err),
             WriteNpyError::FormatHeader(err) => Some(err),
-            WriteNpyError::FormatElements(err) => Some(&**err),
+            WriteNpyError::FormatData(err) => Some(&**err),
         }
     }
 }
@@ -85,9 +83,7 @@ impl fmt::Display for WriteNpyError {
         match self {
             WriteNpyError::Io(err) => write!(f, "I/O error: {}", err),
             WriteNpyError::FormatHeader(err) => write!(f, "error formatting header: {}", err),
-            WriteNpyError::FormatElements(err) => {
-                write!(f, "error formatting data elements: {}", err)
-            }
+            WriteNpyError::FormatData(err) => write!(f, "error formatting data: {}", err),
         }
     }
 }
@@ -113,11 +109,11 @@ impl From<FormatHeaderError> for WriteNpyError {
     }
 }
 
-impl From<WriteElementsError> for WriteNpyError {
-    fn from(err: WriteElementsError) -> WriteNpyError {
+impl From<WriteDataError> for WriteNpyError {
+    fn from(err: WriteDataError) -> WriteNpyError {
         match err {
-            WriteElementsError::Io(err) => WriteNpyError::Io(err),
-            WriteElementsError::FormatElements(err) => WriteNpyError::FormatElements(err),
+            WriteDataError::Io(err) => WriteNpyError::Io(err),
+            WriteDataError::FormatData(err) => WriteNpyError::FormatData(err),
         }
     }
 }
@@ -189,9 +185,9 @@ where
     }
 }
 
-/// An error reading array elements.
+/// An error reading array data.
 #[derive(Debug)]
-pub enum ReadElementsError {
+pub enum ReadDataError {
     /// An error caused by I/O.
     Io(io::Error),
     /// The type descriptor does not match the element type.
@@ -201,50 +197,48 @@ pub enum ReadElementsError {
     /// Extra bytes are present between the end of the data and the end of the
     /// file.
     ExtraBytes(usize),
-    /// An error parsing the elements data.
-    ParseElements(Box<dyn Error + Send + Sync + 'static>),
+    /// An error parsing the data.
+    ParseData(Box<dyn Error + Send + Sync + 'static>),
 }
 
-impl Error for ReadElementsError {
+impl Error for ReadDataError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            ReadElementsError::Io(err) => Some(err),
-            ReadElementsError::WrongDescriptor(_) => None,
-            ReadElementsError::MissingData => None,
-            ReadElementsError::ExtraBytes(_) => None,
-            ReadElementsError::ParseElements(err) => Some(&**err),
+            ReadDataError::Io(err) => Some(err),
+            ReadDataError::WrongDescriptor(_) => None,
+            ReadDataError::MissingData => None,
+            ReadDataError::ExtraBytes(_) => None,
+            ReadDataError::ParseData(err) => Some(&**err),
         }
     }
 }
 
-impl fmt::Display for ReadElementsError {
+impl fmt::Display for ReadDataError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ReadElementsError::Io(err) => write!(f, "I/O error: {}", err),
-            ReadElementsError::WrongDescriptor(desc) => {
+            ReadDataError::Io(err) => write!(f, "I/O error: {}", err),
+            ReadDataError::WrongDescriptor(desc) => {
                 write!(f, "incorrect descriptor ({}) for this type", desc)
             }
-            ReadElementsError::MissingData => write!(f, "reached EOF before reading all data"),
-            ReadElementsError::ExtraBytes(num_extra_bytes) => {
+            ReadDataError::MissingData => write!(f, "reached EOF before reading all data"),
+            ReadDataError::ExtraBytes(num_extra_bytes) => {
                 write!(f, "file had {} extra bytes before EOF", num_extra_bytes)
             }
-            ReadElementsError::ParseElements(err) => {
-                write!(f, "error parsing data elements: {}", err)
-            }
+            ReadDataError::ParseData(err) => write!(f, "error parsing data: {}", err),
         }
     }
 }
 
-impl From<io::Error> for ReadElementsError {
+impl From<io::Error> for ReadDataError {
     /// Performs the conversion.
     ///
     /// If the error kind is `UnexpectedEof`, the `MissingData` variant is
     /// returned. Otherwise, the `Io` variant is returned.
-    fn from(err: io::Error) -> ReadElementsError {
+    fn from(err: io::Error) -> ReadDataError {
         if err.kind() == io::ErrorKind::UnexpectedEof {
-            ReadElementsError::MissingData
+            ReadDataError::MissingData
         } else {
-            ReadElementsError::Io(err)
+            ReadDataError::Io(err)
         }
     }
 }
@@ -262,7 +256,7 @@ pub trait ReadableElement: Sized {
         reader: R,
         type_desc: &PyValue,
         len: usize,
-    ) -> Result<Vec<Self>, ReadElementsError>;
+    ) -> Result<Vec<Self>, ReadDataError>;
 }
 
 /// An error reading a `.npy` file.
@@ -272,8 +266,8 @@ pub enum ReadNpyError {
     Io(io::Error),
     /// An error parsing the file header.
     ParseHeader(HeaderParseError),
-    /// An error parsing the elements.
-    ParseElements(Box<dyn Error + Send + Sync + 'static>),
+    /// An error parsing the data.
+    ParseData(Box<dyn Error + Send + Sync + 'static>),
     /// Overflow while computing the length of the array from the shape
     /// described in the file header.
     LengthOverflow,
@@ -293,7 +287,7 @@ impl Error for ReadNpyError {
         match self {
             ReadNpyError::Io(err) => Some(err),
             ReadNpyError::ParseHeader(err) => Some(err),
-            ReadNpyError::ParseElements(err) => Some(&**err),
+            ReadNpyError::ParseData(err) => Some(&**err),
             ReadNpyError::LengthOverflow => None,
             ReadNpyError::WrongNdim(_, _) => None,
             ReadNpyError::WrongDescriptor(_) => None,
@@ -308,7 +302,7 @@ impl fmt::Display for ReadNpyError {
         match self {
             ReadNpyError::Io(err) => write!(f, "I/O error: {}", err),
             ReadNpyError::ParseHeader(err) => write!(f, "error parsing header: {}", err),
-            ReadNpyError::ParseElements(err) => write!(f, "error parsing data elements: {}", err),
+            ReadNpyError::ParseData(err) => write!(f, "error parsing data: {}", err),
             ReadNpyError::LengthOverflow => write!(f, "overflow computing length from shape"),
             ReadNpyError::WrongNdim(expected, actual) => write!(
                 f,
@@ -347,14 +341,14 @@ impl From<HeaderParseError> for ReadNpyError {
     }
 }
 
-impl From<ReadElementsError> for ReadNpyError {
-    fn from(err: ReadElementsError) -> ReadNpyError {
+impl From<ReadDataError> for ReadNpyError {
+    fn from(err: ReadDataError) -> ReadNpyError {
         match err {
-            ReadElementsError::Io(err) => ReadNpyError::Io(err),
-            ReadElementsError::WrongDescriptor(desc) => ReadNpyError::WrongDescriptor(desc),
-            ReadElementsError::MissingData => ReadNpyError::MissingData,
-            ReadElementsError::ExtraBytes(nbytes) => ReadNpyError::ExtraBytes(nbytes),
-            ReadElementsError::ParseElements(err) => ReadNpyError::ParseElements(err),
+            ReadDataError::Io(err) => ReadNpyError::Io(err),
+            ReadDataError::WrongDescriptor(desc) => ReadNpyError::WrongDescriptor(desc),
+            ReadDataError::MissingData => ReadNpyError::MissingData,
+            ReadDataError::ExtraBytes(nbytes) => ReadNpyError::ExtraBytes(nbytes),
+            ReadDataError::ParseData(err) => ReadNpyError::ParseData(err),
         }
     }
 }
@@ -425,7 +419,7 @@ macro_rules! impl_writable_primitive {
                 }
             }
 
-            fn write<W: io::Write>(&self, mut writer: W) -> Result<(), WriteElementsError> {
+            fn write<W: io::Write>(&self, mut writer: W) -> Result<(), WriteDataError> {
                 // Function to ensure lifetime of bytes slice is correct.
                 fn cast(self_: &$elem) -> &[u8] {
                     unsafe {
@@ -442,7 +436,7 @@ macro_rules! impl_writable_primitive {
             fn write_slice<W: io::Write>(
                 slice: &[Self],
                 mut writer: W,
-            ) -> Result<(), WriteElementsError> {
+            ) -> Result<(), WriteDataError> {
                 // Function to ensure lifetime of bytes slice is correct.
                 fn cast(slice: &[$elem]) -> &[u8] {
                     unsafe {
@@ -463,12 +457,12 @@ macro_rules! impl_writable_primitive {
 /// function.
 ///
 /// **Warning** This will consume the remainder of the reader.
-pub fn check_for_extra_bytes<R: io::Read>(reader: &mut R) -> Result<(), ReadElementsError> {
+pub fn check_for_extra_bytes<R: io::Read>(reader: &mut R) -> Result<(), ReadDataError> {
     let num_extra_bytes = reader.read_to_end(&mut Vec::new())?;
     if num_extra_bytes == 0 {
         Ok(())
     } else {
-        Err(ReadElementsError::ExtraBytes(num_extra_bytes))
+        Err(ReadDataError::ExtraBytes(num_extra_bytes))
     }
 }
 
@@ -479,7 +473,7 @@ macro_rules! impl_readable_primitive_one_byte {
                 mut reader: R,
                 type_desc: &PyValue,
                 len: usize,
-            ) -> Result<Vec<Self>, ReadElementsError> {
+            ) -> Result<Vec<Self>, ReadDataError> {
                 match *type_desc {
                     PyValue::String(ref s) if $(s == $desc)||* => {
                         let mut out = vec![$zero; len];
@@ -487,7 +481,7 @@ macro_rules! impl_readable_primitive_one_byte {
                         check_for_extra_bytes(&mut reader)?;
                         Ok(out)
                     }
-                    ref other => Err(ReadElementsError::WrongDescriptor(other.clone())),
+                    ref other => Err(ReadDataError::WrongDescriptor(other.clone())),
                 }
             }
         }
@@ -511,7 +505,7 @@ macro_rules! impl_readable_primitive_multi_byte {
                 mut reader: R,
                 type_desc: &PyValue,
                 len: usize,
-            ) -> Result<Vec<Self>, ReadElementsError> {
+            ) -> Result<Vec<Self>, ReadDataError> {
                 let mut out = vec![$zero; len];
                 match *type_desc {
                     PyValue::String(ref s) if s == $little_desc => {
@@ -521,7 +515,7 @@ macro_rules! impl_readable_primitive_multi_byte {
                         reader.$read_into::<BigEndian>(&mut out)?;
                     }
                     ref other => {
-                        return Err(ReadElementsError::WrongDescriptor(other.clone()));
+                        return Err(ReadDataError::WrongDescriptor(other.clone()));
                     }
                 }
                 check_for_extra_bytes(&mut reader)?;
@@ -567,9 +561,9 @@ impl fmt::Display for ParseBoolError {
     }
 }
 
-impl From<ParseBoolError> for ReadElementsError {
-    fn from(err: ParseBoolError) -> ReadElementsError {
-        ReadElementsError::ParseElements(Box::new(err))
+impl From<ParseBoolError> for ReadDataError {
+    fn from(err: ParseBoolError) -> ReadDataError {
+        ReadDataError::ParseData(Box::new(err))
     }
 }
 
@@ -578,7 +572,7 @@ impl ReadableElement for bool {
         mut reader: R,
         type_desc: &PyValue,
         len: usize,
-    ) -> Result<Vec<Self>, ReadElementsError> {
+    ) -> Result<Vec<Self>, ReadDataError> {
         match *type_desc {
             PyValue::String(ref s) if s == "|b1" => {
                 // Read the data.
@@ -592,7 +586,7 @@ impl ReadableElement for bool {
                 // represented as `0x01`.
                 for &byte in &bytes {
                     if byte > 1 {
-                        return Err(ReadElementsError::from(ParseBoolError { bad_value: byte }));
+                        return Err(ReadDataError::from(ParseBoolError { bad_value: byte }));
                     }
                 }
 
@@ -616,7 +610,7 @@ impl ReadableElement for bool {
                     Ok(unsafe { Vec::from_raw_parts(ptr as *mut bool, len, cap) })
                 }
             }
-            ref other => Err(ReadElementsError::WrongDescriptor(other.clone())),
+            ref other => Err(ReadDataError::WrongDescriptor(other.clone())),
         }
     }
 }
@@ -628,7 +622,7 @@ impl_writable_primitive!(bool, "|b1", "|b1");
 
 #[cfg(test)]
 mod test {
-    use super::{ReadElementsError, ReadableElement};
+    use super::{ReadDataError, ReadableElement};
     use py_literal::Value as PyValue;
     use std::io::Cursor;
 
@@ -645,7 +639,7 @@ mod test {
         let data = &[0x00, 0x01, 0x05, 0x00, 0x01];
         let type_desc = PyValue::String(String::from("|b1"));
         match <bool>::read_to_end_exact_vec(Cursor::new(data), &type_desc, data.len()) {
-            Err(ReadElementsError::ParseElements(err)) => {
+            Err(ReadDataError::ParseData(err)) => {
                 assert_eq!(format!("{}", err), "error parsing value 0x05 as a bool");
             }
             _ => panic!(),
