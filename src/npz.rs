@@ -63,7 +63,7 @@ impl From<WriteNpyError> for WriteNpzError {
 /// let b: Array1<i32> = array![7, 8, 9];
 /// npz.add_array("a", &a)?;
 /// npz.add_array("b", &b)?;
-/// # Ok::<_, Box<std::error::Error>>(())
+/// # Ok::<_, Box<dyn std::error::Error>>(())
 /// ```
 pub struct NpzWriter<W: Write + Seek> {
     zip: ZipWriter<W>,
@@ -161,7 +161,7 @@ impl From<ReadNpyError> for ReadNpzError {
 /// let mut npz = NpzReader::new(File::open("arrays.npz")?)?;
 /// let a: Array2<i32> = npz.by_name("a")?;
 /// let b: Array1<i32> = npz.by_name("b")?;
-/// # Ok::<_, Box<std::error::Error>>(())
+/// # Ok::<_, Box<dyn std::error::Error>>(())
 /// ```
 pub struct NpzReader<R: Read + Seek> {
     zip: ZipArchive<R>,
