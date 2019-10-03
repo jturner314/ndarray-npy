@@ -34,13 +34,6 @@
 //!
 //! [header dictionary]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.lib.format.html#format-version-1-0
 
-extern crate byteorder;
-extern crate ndarray;
-extern crate num_traits;
-extern crate py_literal;
-#[cfg(feature = "npz")]
-extern crate zip;
-
 mod npy;
 #[cfg(feature = "npz")]
 mod npz;

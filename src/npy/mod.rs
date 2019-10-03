@@ -123,11 +123,7 @@ impl From<WriteDataError> for WriteNpyError {
 /// # Example
 ///
 /// ```
-/// #[macro_use]
-/// extern crate ndarray;
-/// extern crate ndarray_npy;
-///
-/// use ndarray::prelude::*;
+/// use ndarray::{array, Array2};
 /// use ndarray_npy::WriteNpyExt;
 /// use std::fs::File;
 /// # use ndarray_npy::WriteNpyError;
@@ -355,11 +351,7 @@ impl From<ReadDataError> for ReadNpyError {
 /// # Example
 ///
 /// ```
-/// #[macro_use]
-/// extern crate ndarray;
-/// extern crate ndarray_npy;
-///
-/// use ndarray::prelude::*;
+/// use ndarray::Array2;
 /// use ndarray_npy::ReadNpyExt;
 /// use std::fs::File;
 /// # use ndarray_npy::ReadNpyError;

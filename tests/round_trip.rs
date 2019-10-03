@@ -1,6 +1,3 @@
-extern crate ndarray;
-extern crate ndarray_npy;
-
 use ndarray::prelude::*;
 use ndarray::{array, Data};
 use ndarray_npy::{ReadNpyExt, ReadableElement, WritableElement, WriteNpyExt};

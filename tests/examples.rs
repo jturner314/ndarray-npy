@@ -1,6 +1,3 @@
-extern crate ndarray;
-extern crate ndarray_npy;
-
 use ndarray::prelude::*;
 use ndarray_npy::{ReadNpyExt, WriteNpyExt};
 use std::io::Cursor;

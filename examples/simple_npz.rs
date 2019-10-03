@@ -1,7 +1,4 @@
-extern crate ndarray;
-extern crate ndarray_npy;
-
-use ndarray::prelude::*;
+use ndarray::{array, Array1, Array2};
 use ndarray_npy::{NpzReader, NpzWriter};
 use std::fs::File;
 
