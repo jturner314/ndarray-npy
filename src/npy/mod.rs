@@ -132,13 +132,10 @@ impl From<WriteDataError> for WriteNpyError {
 /// use std::fs::File;
 /// # use ndarray_npy::WriteNpyError;
 ///
-/// # fn write_example() -> Result<(), WriteNpyError> {
 /// let arr: Array2<i32> = array![[1, 2, 3], [4, 5, 6]];
 /// let writer = File::create("array.npy")?;
 /// arr.write_npy(writer)?;
-/// # Ok(())
-/// # }
-/// # fn main () {}
+/// # Ok::<_, WriteNpyError>(())
 /// ```
 pub trait WriteNpyExt {
     /// Writes the array to `writer` in [`.npy`
@@ -365,14 +362,12 @@ impl From<ReadDataError> for ReadNpyError {
 /// use ndarray::prelude::*;
 /// use ndarray_npy::ReadNpyExt;
 /// use std::fs::File;
+/// # use ndarray_npy::ReadNpyError;
 ///
-/// # fn read_example() -> Result<(), Box<std::error::Error>> {
 /// let reader = File::open("array.npy")?;
 /// let arr = Array2::<i32>::read_npy(reader)?;
 /// # println!("arr = {}", arr);
-/// # Ok(())
-/// # }
-/// # fn main () {}
+/// # Ok::<_, ReadNpyError>(())
 /// ```
 pub trait ReadNpyExt: Sized {
     /// Reads the array from `reader` in [`.npy`
