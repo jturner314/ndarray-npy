@@ -58,15 +58,12 @@ impl From<WriteNpyError> for WriteNpzError {
 /// use ndarray_npy::NpzWriter;
 /// use std::fs::File;
 ///
-/// # fn write_example() -> Result<(), Box<std::error::Error>> {
 /// let mut npz = NpzWriter::new(File::create("arrays.npz")?);
 /// let a: Array2<i32> = array![[1, 2, 3], [4, 5, 6]];
 /// let b: Array1<i32> = array![7, 8, 9];
 /// npz.add_array("a", &a)?;
 /// npz.add_array("b", &b)?;
-/// # Ok(())
-/// # }
-/// # fn main () {}
+/// # Ok::<_, Box<std::error::Error>>(())
 /// ```
 pub struct NpzWriter<W: Write + Seek> {
     zip: ZipWriter<W>,
@@ -161,13 +158,10 @@ impl From<ReadNpyError> for ReadNpzError {
 /// use ndarray_npy::NpzReader;
 /// use std::fs::File;
 ///
-/// # fn read_example() -> Result<(), Box<std::error::Error>> {
 /// let mut npz = NpzReader::new(File::open("arrays.npz")?)?;
 /// let a: Array2<i32> = npz.by_name("a")?;
 /// let b: Array1<i32> = npz.by_name("b")?;
-/// # Ok(())
-/// # }
-/// # fn main() {}
+/// # Ok::<_, Box<std::error::Error>>(())
 /// ```
 pub struct NpzReader<R: Read + Seek> {
     zip: ZipArchive<R>,
