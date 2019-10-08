@@ -1,8 +1,9 @@
-use byteorder::{ByteOrder, LittleEndian};
+use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
 use num_traits::ToPrimitive;
 use py_literal::{
     FormatError as PyValueFormatError, ParseError as PyValueParseError, Value as PyValue,
 };
+use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 use std::io;
@@ -17,6 +18,8 @@ pub enum ParseHeaderError {
         major: u8,
         minor: u8,
     },
+    /// Indicates that the `HEADER_LEN` doesn't fit in `usize`.
+    HeaderLengthOverflow(u32),
     /// Indicates that the array format string contains non-ASCII characters.
     /// This is an error for .npy format versions 1.0 and 2.0.
     NonAscii,
@@ -41,6 +44,7 @@ impl Error for ParseHeaderError {
         match self {
             MagicString => None,
             Version { .. } => None,
+            HeaderLengthOverflow(_) => None,
             NonAscii => None,
             Utf8Parse(err) => Some(err),
             UnknownKey(_) => None,
@@ -59,6 +63,7 @@ impl fmt::Display for ParseHeaderError {
         match self {
             MagicString => write!(f, "start does not match magic string"),
             Version { major, minor } => write!(f, "unknown version number: {}.{}", major, minor),
+            HeaderLengthOverflow(header_len) => write!(f, "HEADER_LEN {} does not fit in `usize`", header_len),
             NonAscii => write!(f, "non-ascii in array format string; this is not supported in .npy format versions 1.0 and 2.0"),
             Utf8Parse(err) => write!(f, "error parsing array format string as UTF-8: {}", err),
             UnknownKey(key) => write!(f, "unknown key: {}", key),
@@ -168,12 +173,14 @@ impl Version {
     }
 
     /// Read header length.
-    fn read_header_len<R: io::Read>(&self, mut reader: R) -> Result<usize, io::Error> {
-        let mut buf = [0; 4];
-        reader.read_exact(&mut buf[..self.header_len_num_bytes()])?;
+    fn read_header_len<R: io::Read>(&self, mut reader: R) -> Result<usize, ReadHeaderError> {
         match *self {
-            Version::V1_0 => Ok(LittleEndian::read_u16(&buf) as usize),
-            Version::V2_0 | Version::V3_0 => Ok(LittleEndian::read_u32(&buf) as usize),
+            Version::V1_0 => Ok(usize::from(reader.read_u16::<LittleEndian>()?)),
+            Version::V2_0 | Version::V3_0 => {
+                let header_len: u32 = reader.read_u32::<LittleEndian>()?;
+                Ok(usize::try_from(header_len)
+                    .map_err(|_| ParseHeaderError::HeaderLengthOverflow(header_len))?)
+            }
         }
     }
 
