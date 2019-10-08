@@ -14,7 +14,7 @@ const MAGIC_STRING: &[u8] = b"\x93NUMPY";
 /// The total header length (including magic string, version number, header
 /// length value, array format description, padding, and final newline) must be
 /// evenly divisible by this value.
-const HEADER_DIVISOR: usize = 16;
+const HEADER_DIVISOR: usize = 64;
 
 #[derive(Debug)]
 pub enum ParseHeaderError {
