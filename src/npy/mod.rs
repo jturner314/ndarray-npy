@@ -461,10 +461,8 @@ macro_rules! impl_writable_primitive {
                 // Function to ensure lifetime of bytes slice is correct.
                 fn cast(self_: &$elem) -> &[u8] {
                     unsafe {
-                        std::slice::from_raw_parts(
-                            self_ as *const $elem as *const u8,
-                            mem::size_of::<$elem>(),
-                        )
+                        let ptr: *const $elem = self_;
+                        std::slice::from_raw_parts(ptr.cast::<u8>(), mem::size_of::<$elem>())
                     }
                 }
                 writer.write_all(cast(self))?;
@@ -479,7 +477,7 @@ macro_rules! impl_writable_primitive {
                 fn cast(slice: &[$elem]) -> &[u8] {
                     unsafe {
                         std::slice::from_raw_parts(
-                            slice.as_ptr() as *const u8,
+                            slice.as_ptr().cast::<u8>(),
                             slice.len() * mem::size_of::<$elem>(),
                         )
                     }
@@ -630,9 +628,9 @@ impl ReadableElement for bool {
 
                 // Cast the `Vec<u8>` to `Vec<bool>`.
                 {
-                    let ptr = bytes.as_mut_ptr();
-                    let len = bytes.len();
-                    let cap = bytes.capacity();
+                    let ptr: *mut u8 = bytes.as_mut_ptr();
+                    let len: usize = bytes.len();
+                    let cap: usize = bytes.capacity();
                     mem::forget(bytes);
                     // This is safe because:
                     //
@@ -645,7 +643,7 @@ impl ReadableElement for bool {
                     // * `len` and `cap` are copied directly from the
                     //   `Vec<u8>`, so `len <= cap` and `cap` is the capacity
                     //   `ptr` was allocated with.
-                    Ok(unsafe { Vec::from_raw_parts(ptr as *mut bool, len, cap) })
+                    Ok(unsafe { Vec::from_raw_parts(ptr.cast::<bool>(), len, cap) })
                 }
             }
             ref other => Err(ReadDataError::WrongDescriptor(other.clone())),
