@@ -369,8 +369,8 @@ impl Header {
                 std::str::from_utf8(without_newline).map_err(ParseHeaderError::from)?
             }
         };
-        let header_dict: PyValue = header_str.parse().map_err(ParseHeaderError::from)?;
-        Ok(Header::from_py_value(header_dict)?)
+        let arr_format: PyValue = header_str.parse().map_err(ParseHeaderError::from)?;
+        Ok(Header::from_py_value(arr_format)?)
     }
 
     fn to_py_value(&self) -> PyValue {
