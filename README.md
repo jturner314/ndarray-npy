@@ -90,6 +90,23 @@ where the `features` list is one of the following:
 
 ## Releases
 
+* **0.5.0** (not yet released)
+
+  * Updated to `ndarray` 0.13.
+  * Updated to Rust 1.38.
+  * Added `read_npy` and `write_npy` convenience functions.
+  * Added support for `npy` format version 3.0.
+  * Renamed `ReadableElement::read_vec` to `::read_to_end_exact_vec`.
+  * Refactored the error types and variants, including removing the associated
+    `Error` type from `Readable/WritableElement` and updating to the new style
+    of `std::error::Error` implementation.
+  * Updated the padding calculation to make the total header length be
+    divisible by 64 instead of just 16 when writing files. (See
+    [numpy/numpy#9025](https://github.com/numpy/numpy/pull/9025).)
+  * Fixed determination of file format version when the addition of padding
+    changes the required version when writing the file.
+  * Fixed miscellaneous bugs related to overflow and error handling.
+
 * **0.4.0**
 
   * Added support for reading/writing arrays of `bool`, by @tobni and
