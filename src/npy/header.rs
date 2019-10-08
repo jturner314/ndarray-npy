@@ -11,6 +11,11 @@ use std::io;
 /// Magic string to indicate npy format.
 const MAGIC_STRING: &[u8] = b"\x93NUMPY";
 
+/// The total header length (including magic string, version number, header
+/// length value, array format description, padding, and final newline) must be
+/// evenly divisible by this value.
+const HEADER_DIVISOR: usize = 16;
+
 #[derive(Debug)]
 pub enum ParseHeaderError {
     MagicString,
@@ -124,6 +129,7 @@ impl From<ParseHeaderError> for ReadHeaderError {
     }
 }
 
+#[derive(Clone, Copy)]
 #[allow(non_camel_case_types)]
 enum Version {
     V1_0,
@@ -203,17 +209,60 @@ impl Version {
             }
         }
     }
+
+    /// Computes the total header length, formatted `HEADER_LEN` value, and
+    /// padding length for this .npy version.
+    ///
+    /// `unpadded_arr_format` is the Python literal describing the array
+    /// format, formatted as an ASCII string without any padding.
+    ///
+    /// Returns `None` if the total header length overflows `usize` or if the
+    /// value of `HEADER_LEN` is too large for this .npy version.
+    fn compute_lengths(&self, unpadded_arr_format: &[u8]) -> Option<HeaderLengthInfo> {
+        /// Length of a '\n' char in bytes.
+        const NEWLINE_LEN: usize = 1;
+
+        let prefix_len: usize =
+            MAGIC_STRING.len() + Version::VERSION_NUM_BYTES + self.header_len_num_bytes();
+        let unpadded_total_len: usize = prefix_len
+            .checked_add(unpadded_arr_format.len())?
+            .checked_add(NEWLINE_LEN)?;
+        let padding_len: usize = HEADER_DIVISOR - unpadded_total_len % HEADER_DIVISOR;
+        let total_len: usize = unpadded_total_len.checked_add(padding_len)?;
+        let header_len: usize = total_len - prefix_len;
+        let formatted_header_len = self.format_header_len(header_len)?;
+        Some(HeaderLengthInfo {
+            total_len,
+            formatted_header_len,
+            padding_len,
+        })
+    }
+}
+
+struct HeaderLengthInfo {
+    /// Total header length (including magic string, version number, header
+    /// length value, array format description, padding, and final newline).
+    total_len: usize,
+    /// Formatted `HEADER_LEN` value. (This is the number of bytes in the array
+    /// format description, padding, and final newline.)
+    formatted_header_len: Vec<u8>,
+    /// Number of spaces of padding.
+    padding_len: usize,
 }
 
 #[derive(Debug)]
 pub enum FormatHeaderError {
     PyValue(PyValueFormatError),
+    /// The total header length overflows `usize`, or `HEADER_LEN` exceeds the
+    /// maximum encodable value.
+    HeaderTooLong,
 }
 
 impl Error for FormatHeaderError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             FormatHeaderError::PyValue(err) => Some(err),
+            FormatHeaderError::HeaderTooLong => None,
         }
     }
 }
@@ -222,6 +271,7 @@ impl fmt::Display for FormatHeaderError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             FormatHeaderError::PyValue(err) => write!(f, "error formatting Python value: {}", err),
+            FormatHeaderError::HeaderTooLong => write!(f, "the header is too long"),
         }
     }
 }
@@ -404,38 +454,28 @@ impl Header {
         let mut arr_format = Vec::new();
         self.to_py_value().write_ascii(&mut arr_format)?;
 
-        // Length of a '\n' char in bytes.
-        const NEWLINE_LEN: usize = 1;
+        // Determine appropriate version based on header length, and compute
+        // length information.
+        let (version, length_info) = [Version::V1_0, Version::V2_0]
+            .iter()
+            .find_map(|&version| Some((version, version.compute_lengths(&arr_format)?)))
+            .ok_or(FormatHeaderError::HeaderTooLong)?;
 
-        // Determine appropriate version based on minimum number of bytes needed to
-        // represent header length (including final newline).
-        let version = if arr_format.len() + NEWLINE_LEN > std::u16::MAX as usize {
-            Version::V2_0
-        } else {
-            Version::V1_0
-        };
-        let prefix_len =
-            MAGIC_STRING.len() + Version::VERSION_NUM_BYTES + version.header_len_num_bytes();
-
-        // Add padding spaces to make total header length divisible by 16.
-        for _ in 0..(16 - (prefix_len + arr_format.len() + NEWLINE_LEN) % 16) {
-            arr_format.push(b' ');
-        }
-        // Add final newline.
-        arr_format.push(b'\n');
-
-        // Determine length of header.
-        let header_len = arr_format.len();
-
-        let mut out = Vec::with_capacity(prefix_len + header_len);
+        // Write the header.
+        let mut out = Vec::with_capacity(length_info.total_len);
         out.extend_from_slice(MAGIC_STRING);
         out.push(version.major_version());
         out.push(version.minor_version());
-        out.extend_from_slice(&version.format_header_len(header_len).unwrap());
+        out.extend_from_slice(&length_info.formatted_header_len);
         out.extend_from_slice(&arr_format);
+        for _ in 0..length_info.padding_len {
+            out.push(b' ');
+        }
+        out.push(b'\n');
 
-        // Verify that length of header is divisible by 16.
-        debug_assert_eq!(out.len() % 16, 0);
+        // Verify the length of the header.
+        debug_assert_eq!(out.len(), length_info.total_len);
+        debug_assert_eq!(out.len() % HEADER_DIVISOR, 0);
 
         Ok(out)
     }
