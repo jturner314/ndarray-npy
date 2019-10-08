@@ -153,8 +153,8 @@ impl Version {
     }
 
     /// Major version number.
-    fn major_version(&self) -> u8 {
-        match *self {
+    fn major_version(self) -> u8 {
+        match self {
             Version::V1_0 => 1,
             Version::V2_0 => 2,
             Version::V3_0 => 3,
@@ -162,8 +162,8 @@ impl Version {
     }
 
     /// Major version number.
-    fn minor_version(&self) -> u8 {
-        match *self {
+    fn minor_version(self) -> u8 {
+        match self {
             Version::V1_0 => 0,
             Version::V2_0 => 0,
             Version::V3_0 => 0,
@@ -171,16 +171,16 @@ impl Version {
     }
 
     /// Number of bytes in representation of header length.
-    fn header_len_num_bytes(&self) -> usize {
-        match *self {
+    fn header_len_num_bytes(self) -> usize {
+        match self {
             Version::V1_0 => 2,
             Version::V2_0 | Version::V3_0 => 4,
         }
     }
 
     /// Read header length.
-    fn read_header_len<R: io::Read>(&self, mut reader: R) -> Result<usize, ReadHeaderError> {
-        match *self {
+    fn read_header_len<R: io::Read>(self, mut reader: R) -> Result<usize, ReadHeaderError> {
+        match self {
             Version::V1_0 => Ok(usize::from(reader.read_u16::<LittleEndian>()?)),
             Version::V2_0 | Version::V3_0 => {
                 let header_len: u32 = reader.read_u32::<LittleEndian>()?;
@@ -193,8 +193,8 @@ impl Version {
     /// Format header length as bytes for writing to file.
     ///
     /// Returns `None` if the value of `header_len` is too large for this .npy version.
-    fn format_header_len(&self, header_len: usize) -> Option<Vec<u8>> {
-        match *self {
+    fn format_header_len(self, header_len: usize) -> Option<Vec<u8>> {
+        match self {
             Version::V1_0 => {
                 let header_len: u16 = u16::try_from(header_len).ok()?;
                 let mut out = vec![0; self.header_len_num_bytes()];
@@ -218,7 +218,7 @@ impl Version {
     ///
     /// Returns `None` if the total header length overflows `usize` or if the
     /// value of `HEADER_LEN` is too large for this .npy version.
-    fn compute_lengths(&self, unpadded_arr_format: &[u8]) -> Option<HeaderLengthInfo> {
+    fn compute_lengths(self, unpadded_arr_format: &[u8]) -> Option<HeaderLengthInfo> {
         /// Length of a '\n' char in bytes.
         const NEWLINE_LEN: usize = 1;
 
