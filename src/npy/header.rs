@@ -185,19 +185,23 @@ impl Version {
     }
 
     /// Format header length as bytes for writing to file.
-    fn format_header_len(&self, header_len: usize) -> Vec<u8> {
-        let mut out = vec![0; self.header_len_num_bytes()];
+    ///
+    /// Returns `None` if the value of `header_len` is too large for this .npy version.
+    fn format_header_len(&self, header_len: usize) -> Option<Vec<u8>> {
         match *self {
             Version::V1_0 => {
-                assert!(header_len <= std::u16::MAX as usize);
-                LittleEndian::write_u16(&mut out, header_len as u16);
+                let header_len: u16 = u16::try_from(header_len).ok()?;
+                let mut out = vec![0; self.header_len_num_bytes()];
+                LittleEndian::write_u16(&mut out, header_len);
+                Some(out)
             }
             Version::V2_0 | Version::V3_0 => {
-                assert!(header_len <= std::u32::MAX as usize);
-                LittleEndian::write_u32(&mut out, header_len as u32);
+                let header_len: u32 = u32::try_from(header_len).ok()?;
+                let mut out = vec![0; self.header_len_num_bytes()];
+                LittleEndian::write_u32(&mut out, header_len);
+                Some(out)
             }
         }
-        out
     }
 }
 
@@ -427,7 +431,7 @@ impl Header {
         out.extend_from_slice(MAGIC_STRING);
         out.push(version.major_version());
         out.push(version.minor_version());
-        out.extend_from_slice(&version.format_header_len(header_len));
+        out.extend_from_slice(&version.format_header_len(header_len).unwrap());
         out.extend_from_slice(&arr_format);
 
         // Verify that length of header is divisible by 16.
