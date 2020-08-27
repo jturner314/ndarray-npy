@@ -234,7 +234,6 @@ impl Version {
         Some(HeaderLengthInfo {
             total_len,
             formatted_header_len,
-            padding_len,
         })
     }
 }
@@ -246,8 +245,6 @@ struct HeaderLengthInfo {
     /// Formatted `HEADER_LEN` value. (This is the number of bytes in the array
     /// format description, padding, and final newline.)
     formatted_header_len: Vec<u8>,
-    /// Number of spaces of padding.
-    padding_len: usize,
 }
 
 #[derive(Debug)]
@@ -468,9 +465,7 @@ impl Header {
         out.push(version.minor_version());
         out.extend_from_slice(&length_info.formatted_header_len);
         out.extend_from_slice(&arr_format);
-        for _ in 0..length_info.padding_len {
-            out.push(b' ');
-        }
+        out.resize(length_info.total_len - 1, b' ');
         out.push(b'\n');
 
         // Verify the length of the header.
