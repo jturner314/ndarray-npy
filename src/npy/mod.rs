@@ -52,10 +52,10 @@ where
 /// # use ndarray_npy::WriteNpyError;
 ///
 /// let arr = array![[1, 2, 3], [4, 5, 6]];
-/// write_npy("array.npy", arr)?;
+/// write_npy("array.npy", &arr)?;
 /// # Ok::<_, WriteNpyError>(())
 /// ```
-pub fn write_npy<P, T>(path: P, array: T) -> Result<(), WriteNpyError>
+pub fn write_npy<P, T>(path: P, array: &T) -> Result<(), WriteNpyError>
 where
     P: AsRef<std::path::Path>,
     T: WriteNpyExt,
