@@ -145,7 +145,7 @@ be especially appreciated.
 
 ## License
 
-Copyright 2018–2019 Jim Turner and `ndarray-npy` developers
+Copyright 2018–2020 Jim Turner and `ndarray-npy` developers
 
 Licensed under the [Apache License, Version 2.0](LICENSE-APACHE), or the [MIT
 license](LICENSE-MIT), at your option. You may not use this project except in
