@@ -898,6 +898,20 @@ mod test {
     }
 
     #[test]
+    fn view_i32_mut() {
+        let elems = &mut [34234324, -980780878i32, 2849874];
+        let data = unsafe { std::slice::from_raw_parts_mut(
+            elems.as_mut_ptr().cast(),
+            elems.len() * std::mem::size_of::<i32>(),
+        ) };
+        let type_desc = PyValue::String(String::from("<i4"));
+        let out = <i32>::bytes_as_slice_mut(data, &type_desc, data.len()).unwrap();
+        out[2] += 1;
+        assert_eq!(out, elems);
+        assert_eq!(elems[2], 2849875);
+    }
+
+    #[test]
     fn read_bool() {
         let data = &[0x00, 0x01, 0x00, 0x00, 0x01];
         let type_desc = PyValue::String(String::from("|b1"));
