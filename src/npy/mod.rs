@@ -898,6 +898,22 @@ mod test {
     }
 
     #[test]
+    fn view_i32_truncated_data() {
+        let elems = &[34234324, -980780878i32, 2849874];
+        let data = unsafe { std::slice::from_raw_parts(
+            elems.as_ptr().cast(),
+            // Truncate data by `1` byte affecting also its length in header.
+            elems.len() * std::mem::size_of::<i32>() - 1,
+        ) };
+        let type_desc = PyValue::String(String::from("<i4"));
+        let out = <i32>::bytes_as_slice(&data, &type_desc, data.len());
+        match out.err() {
+           Some(ReadDataError::TruncatedData) => {},
+           _ => panic!(),
+        }
+    }
+
+    #[test]
     fn view_i32_mut() {
         let elems = &mut [34234324, -980780878i32, 2849874];
         let data = unsafe { std::slice::from_raw_parts_mut(
@@ -909,6 +925,50 @@ mod test {
         out[2] += 1;
         assert_eq!(out, elems);
         assert_eq!(elems[2], 2849875);
+    }
+
+    #[test]
+    fn view_bool() {
+        let data = &[0x00, 0x01, 0x00, 0x00, 0x01];
+        let type_desc = PyValue::String(String::from("|b1"));
+        let out = <bool>::bytes_as_slice(data, &type_desc, data.len()).unwrap();
+        assert_eq!(out, vec![false, true, false, false, true]);
+    }
+
+    #[test]
+    fn view_bool_bad_value() {
+        let data = &[0x00, 0x01, 0x05, 0x00, 0x01];
+        let type_desc = PyValue::String(String::from("|b1"));
+        match <bool>::bytes_as_slice(data, &type_desc, data.len()) {
+            Err(ReadDataError::ParseData(err)) => {
+                assert_eq!(format!("{}", err), "error parsing value 0x05 as a bool");
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn view_bool_mut() {
+        let data = &mut [0x00, 0x01, 0x00, 0x00, 0x01];
+        let len = data.len();
+        let type_desc = PyValue::String(String::from("|b1"));
+        let out = <bool>::bytes_as_slice_mut(data, &type_desc, len).unwrap();
+        out[0] = true;
+        out[1] = false;
+        assert_eq!(data, &[0x01, 0x00, 0x00, 0x00, 0x01]);
+    }
+
+    #[test]
+    fn view_bool_mut_bad_value() {
+        let data = &mut [0x00, 0x01, 0x05, 0x00, 0x01];
+        let len = data.len();
+        let type_desc = PyValue::String(String::from("|b1"));
+        match <bool>::bytes_as_slice_mut(data, &type_desc, len) {
+            Err(ReadDataError::ParseData(err)) => {
+                assert_eq!(format!("{}", err), "error parsing value 0x05 as a bool");
+            }
+            _ => panic!(),
+        }
     }
 
     #[test]
