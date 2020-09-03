@@ -848,19 +848,32 @@ where
     }
 }
 
+/// An array element type that can be cast from an `.npy` or uncompressed `.npz` file.
 pub trait CastableElement: Sized {
+    /// Casts `bytes` as slice of elements of length `len`.
+    ///
+    /// This method should invoke `slice_len()` before casting.
     fn bytes_as_slice<'a>(
         bytes: &'a [u8],
         type_desc: &PyValue,
         len: usize,
     ) -> Result<&'a [Self], ReadDataError>;
 
+    /// Casts `bytes` as mutable slice of elements of length `len`.
+    ///
+    /// This method should invoke `slice_len()` before casting.
     fn bytes_as_slice_mut<'a>(
         bytes: &'a mut [u8],
         type_desc: &PyValue,
         len: usize,
     ) -> Result<&'a mut [Self], ReadDataError>;
 
+    /// Verifies lengths before computing slice length.
+    ///
+    /// Ensures:
+    ///
+    ///   * `data_len` equals `len` extracted from header.
+    ///   * `data_len` is an integral multiple of its element length.
     fn slice_len<'a>(
         data_len: usize,
         len: usize,
