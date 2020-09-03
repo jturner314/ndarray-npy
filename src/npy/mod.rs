@@ -502,7 +502,7 @@ macro_rules! impl_writable_primitive {
     };
 }
 
-/// Returns `Ok(_)` iff the `reader` had no more bytes on entry to this
+/// Returns `Ok(_)` if the `reader` had no more bytes on entry to this
 /// function.
 ///
 /// **Warning** This will consume the remainder of the reader.
