@@ -791,7 +791,7 @@ impl CastableElement for bool {
 pub trait ViewNpyExt<'a>: Sized {
     /// Returns a read-only view of a memory-mapped `.npy` file.
     ///
-    /// **Note:** Iterates over `bool` array to verify `true` equals `0x01`.
+    /// **Note:** Iterates over `bool` array to ensure `0x00`/`0x01` values.
     fn view_npy(buf: &'a [u8]) -> Result<Self, ReadNpyError>;
 }
 
@@ -799,7 +799,7 @@ pub trait ViewNpyExt<'a>: Sized {
 pub trait ViewNpyMutExt<'a>: Sized {
     /// Returns a read-write view of a memory-mapped `.npy` file.
     ///
-    /// **Note:** Iterates over `bool` array to verify `true` equals `0x01`.
+    /// **Note:** Iterates over `bool` array to ensure `0x00`/`0x01` values.
     fn view_npy_mut(buf: &'a mut [u8]) -> Result<Self, ReadNpyError>;
 }
 
