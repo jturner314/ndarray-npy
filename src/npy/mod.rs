@@ -231,6 +231,7 @@ where
 
 /// An error reading array data.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ReadDataError {
     /// An error caused by I/O.
     Io(io::Error),
@@ -238,6 +239,8 @@ pub enum ReadDataError {
     WrongDescriptor(PyValue),
     /// The file does not contain all the data described in the header.
     MissingData,
+    /// The data length is no integral multiple of the element length.
+    TruncatedData,
     /// Extra bytes are present between the end of the data and the end of the
     /// file.
     ExtraBytes(usize),
@@ -251,6 +254,7 @@ impl Error for ReadDataError {
             ReadDataError::Io(err) => Some(err),
             ReadDataError::WrongDescriptor(_) => None,
             ReadDataError::MissingData => None,
+            ReadDataError::TruncatedData => None,
             ReadDataError::ExtraBytes(_) => None,
             ReadDataError::ParseData(err) => Some(&**err),
         }
@@ -265,6 +269,8 @@ impl fmt::Display for ReadDataError {
                 write!(f, "incorrect descriptor ({}) for this type", desc)
             }
             ReadDataError::MissingData => write!(f, "reached EOF before reading all data"),
+            ReadDataError::TruncatedData =>
+                write!(f, "data length is no integral multiple if element length"),
             ReadDataError::ExtraBytes(num_extra_bytes) => {
                 write!(f, "file had {} extra bytes before EOF", num_extra_bytes)
             }
@@ -305,6 +311,7 @@ pub trait ReadableElement: Sized {
 
 /// An error reading a `.npy` file.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ReadNpyError {
     /// An error caused by I/O.
     Io(io::Error),
@@ -321,6 +328,8 @@ pub enum ReadNpyError {
     WrongDescriptor(PyValue),
     /// The file does not contain all the data described in the header.
     MissingData,
+    /// The data length is no integral multiple of the element length.
+    TruncatedData,
     /// Extra bytes are present between the end of the data and the end of the
     /// file.
     ExtraBytes(usize),
@@ -336,6 +345,7 @@ impl Error for ReadNpyError {
             ReadNpyError::WrongNdim(_, _) => None,
             ReadNpyError::WrongDescriptor(_) => None,
             ReadNpyError::MissingData => None,
+            ReadNpyError::TruncatedData => None,
             ReadNpyError::ExtraBytes(_) => None,
         }
     }
@@ -357,6 +367,8 @@ impl fmt::Display for ReadNpyError {
                 write!(f, "incorrect descriptor ({}) for this type", desc)
             }
             ReadNpyError::MissingData => write!(f, "reached EOF before reading all data"),
+            ReadNpyError::TruncatedData => write!(f,
+                "data length is no integral multiple of element length"),
             ReadNpyError::ExtraBytes(num_extra_bytes) => {
                 write!(f, "file had {} extra bytes before EOF", num_extra_bytes)
             }
@@ -391,6 +403,7 @@ impl From<ReadDataError> for ReadNpyError {
             ReadDataError::Io(err) => ReadNpyError::Io(err),
             ReadDataError::WrongDescriptor(desc) => ReadNpyError::WrongDescriptor(desc),
             ReadDataError::MissingData => ReadNpyError::MissingData,
+            ReadDataError::TruncatedData => ReadNpyError::TruncatedData,
             ReadDataError::ExtraBytes(nbytes) => ReadNpyError::ExtraBytes(nbytes),
             ReadDataError::ParseData(err) => ReadNpyError::ParseData(err),
         }
@@ -524,10 +537,45 @@ macro_rules! impl_readable_primitive_one_byte {
     };
 }
 
+macro_rules! impl_castable_primitive_one_byte {
+    ($elem:ty, [$($desc:expr),*]) => {
+        impl CastableElement for $elem {
+            fn bytes_as_slice<'a>(
+                bytes: &'a [u8],
+                type_desc: &PyValue,
+                len: usize,
+            ) -> Result<&'a [Self], ReadDataError> {
+                match *type_desc {
+                    PyValue::String(ref s) if $(s == $desc)||* =>
+                        Self::slice_len(bytes.len(), len).map(|len| unsafe {
+                            std::slice::from_raw_parts(bytes.as_ptr().cast(), len)
+                        }),
+                    ref other => Err(ReadDataError::WrongDescriptor(other.clone())),
+                }
+            }
+
+            fn bytes_as_slice_mut<'a>(
+                bytes: &'a mut [u8],
+                type_desc: &PyValue,
+                len: usize,
+            ) -> Result<&'a mut [Self], ReadDataError> {
+                match *type_desc {
+                    PyValue::String(ref s) if $(s == $desc)||* =>
+                        Self::slice_len(bytes.len(), len).map(|len| unsafe {
+                            std::slice::from_raw_parts_mut(bytes.as_mut_ptr().cast(), len)
+                        }),
+                    ref other => Err(ReadDataError::WrongDescriptor(other.clone())),
+                }
+            }
+        }
+    };
+}
+
 macro_rules! impl_primitive_one_byte {
     ($elem:ty, $write_desc:expr, [$($read_desc:expr),*], $zero:expr, $read_into:ident) => {
         impl_writable_primitive!($elem, $write_desc, $write_desc);
         impl_readable_primitive_one_byte!($elem, [$($read_desc),*], $zero, $read_into);
+        impl_castable_primitive_one_byte!($elem, [$($read_desc),*]);
     };
 }
 
@@ -561,10 +609,45 @@ macro_rules! impl_readable_primitive_multi_byte {
     };
 }
 
+macro_rules! impl_castable_primitive_multi_byte {
+    ($elem:ty, $little_desc:expr, $big_desc:expr) => {
+        impl CastableElement for $elem {
+            fn bytes_as_slice<'a>(
+                bytes: &'a [u8],
+                type_desc: &PyValue,
+                len: usize,
+            ) -> Result<&'a [Self], ReadDataError> {
+                match *type_desc {
+                    PyValue::String(ref s) if s == $little_desc || s == $big_desc =>
+                        Self::slice_len(bytes.len(), len).map(|len| unsafe {
+                            std::slice::from_raw_parts(bytes.as_ptr().cast(), len)
+                        }),
+                    ref other => Err(ReadDataError::WrongDescriptor(other.clone())),
+                }
+            }
+
+            fn bytes_as_slice_mut<'a>(
+                bytes: &'a mut [u8],
+                type_desc: &PyValue,
+                len: usize,
+            ) -> Result<&'a mut [Self], ReadDataError> {
+                match *type_desc {
+                    PyValue::String(ref s) if s == $little_desc || s == $big_desc =>
+                        Self::slice_len(bytes.len(), len).map(|len| unsafe {
+                            std::slice::from_raw_parts_mut(bytes.as_mut_ptr().cast(), len)
+                        }),
+                    ref other => Err(ReadDataError::WrongDescriptor(other.clone())),
+                }
+            }
+        }
+    };
+}
+
 macro_rules! impl_primitive_multi_byte {
     ($elem:ty, $little_desc:expr, $big_desc:expr, $zero:expr, $read_into:ident) => {
         impl_writable_primitive!($elem, $little_desc, $big_desc);
         impl_readable_primitive_multi_byte!($elem, $little_desc, $big_desc, $zero, $read_into);
+        impl_castable_primitive_multi_byte!($elem, $little_desc, $big_desc);
     };
 }
 
@@ -656,11 +739,163 @@ impl ReadableElement for bool {
 // can just cast the data in-place.
 impl_writable_primitive!(bool, "|b1", "|b1");
 
+impl CastableElement for bool {
+    fn bytes_as_slice<'a>(
+        bytes: &'a [u8],
+        type_desc: &PyValue,
+        len: usize,
+    ) -> Result<&'a [Self], ReadDataError> {
+        match *type_desc {
+            PyValue::String(ref s) if s == "|b1" => {
+                let len = Self::slice_len(bytes.len(), len)?;
+                // Check that all the data is valid, because creating a `bool`
+                // with an invalid value is undefined behavior. Rust guarantees
+                // that `false` is represented as `0x00` and `true` is
+                // represented as `0x01`.
+                for &byte in bytes {
+                    if byte > 1 {
+                        return Err(ReadDataError::from(ParseBoolError { bad_value: byte }));
+                    }
+                }
+                Ok(unsafe { std::slice::from_raw_parts(bytes.as_ptr().cast(), len) })
+            },
+            ref other => Err(ReadDataError::WrongDescriptor(other.clone())),
+        }
+    }
+
+    fn bytes_as_slice_mut<'a>(
+        bytes: &'a mut [u8],
+        type_desc: &PyValue,
+        len: usize,
+    ) -> Result<&'a mut [Self], ReadDataError> {
+        match *type_desc {
+            PyValue::String(ref s) if s == "|b1" => {
+                let len = Self::slice_len(bytes.len(), len)?;
+                // Check that all the data is valid, because creating a `bool`
+                // with an invalid value is undefined behavior. Rust guarantees
+                // that `false` is represented as `0x00` and `true` is
+                // represented as `0x01`.
+                for &byte in bytes as &_ {
+                    if byte > 1 {
+                        return Err(ReadDataError::from(ParseBoolError { bad_value: byte }));
+                    }
+                }
+                Ok(unsafe { std::slice::from_raw_parts_mut(bytes.as_mut_ptr().cast(), len) })
+            },
+            ref other => Err(ReadDataError::WrongDescriptor(other.clone())),
+        }
+    }
+}
+
+/// Extension trait for read-only `ArrayView` of memory-mapped `.npy` files.
+pub trait ViewNpyExt<'a>: Sized {
+    /// Returns a read-only view of a memory-mapped `.npy` file.
+    ///
+    /// **Note:** Iterates over `bool` array to verify `true` equals `0x01`.
+    fn view_npy(buf: &'a [u8]) -> Result<Self, ReadNpyError>;
+}
+
+/// Extension trait for read-write `ArrayViewMut` of memory-mapped `.npy` files.
+pub trait ViewNpyMutExt<'a>: Sized {
+    /// Returns a read-write view of a memory-mapped `.npy` file.
+    ///
+    /// **Note:** Iterates over `bool` array to verify `true` equals `0x01`.
+    fn view_npy_mut(buf: &'a mut [u8]) -> Result<Self, ReadNpyError>;
+}
+
+impl<'a, A, D> ViewNpyExt<'a> for ArrayView<'a, A, D>
+where
+    A: CastableElement,
+    D: Dimension,
+{
+    fn view_npy(buf: &'a [u8]) -> Result<Self, ReadNpyError> {
+        let mut reader = buf;
+        let header = Header::from_reader(&mut reader)?;
+        let shape = header.shape.into_dimension();
+        let ndim = shape.ndim();
+        let len = match shape.size_checked() {
+            Some(len) if len <= std::isize::MAX as usize => len,
+            _ => return Err(ReadNpyError::LengthOverflow),
+        };
+        let data = A::bytes_as_slice(&reader, &header.type_descriptor, len)?;
+        ArrayView::from_shape(shape.set_f(header.fortran_order), data)
+            .unwrap()
+            .into_dimensionality()
+            .map_err(|_| ReadNpyError::WrongNdim(D::NDIM, ndim))
+    }
+}
+
+impl<'a, A, D> ViewNpyMutExt<'a> for ArrayViewMut<'a, A, D>
+where
+    A: CastableElement,
+    D: Dimension,
+{
+    fn view_npy_mut(buf: &'a mut [u8]) -> Result<Self, ReadNpyError> {
+        let mut reader = buf as &[u8];
+        let header = Header::from_reader(&mut reader)?;
+        let shape = header.shape.into_dimension();
+        let ndim = shape.ndim();
+        let len = match shape.size_checked() {
+            Some(len) if len <= std::isize::MAX as usize => len,
+            _ => return Err(ReadNpyError::LengthOverflow),
+        };
+        let mid = buf.len() - reader.len();
+        let data = A::bytes_as_slice_mut(&mut buf[mid..], &header.type_descriptor, len)?;
+        ArrayViewMut::from_shape(shape.set_f(header.fortran_order), data)
+            .unwrap()
+            .into_dimensionality()
+            .map_err(|_| ReadNpyError::WrongNdim(D::NDIM, ndim))
+    }
+}
+
+pub trait CastableElement: Sized {
+    fn bytes_as_slice<'a>(
+        bytes: &'a [u8],
+        type_desc: &PyValue,
+        len: usize,
+    ) -> Result<&'a [Self], ReadDataError>;
+
+    fn bytes_as_slice_mut<'a>(
+        bytes: &'a mut [u8],
+        type_desc: &PyValue,
+        len: usize,
+    ) -> Result<&'a mut [Self], ReadDataError>;
+
+    fn slice_len<'a>(
+        data_len: usize,
+        len: usize,
+    ) -> Result<usize, ReadDataError> {
+        let elem_len = mem::size_of::<Self>();
+        let slice_len = len / elem_len;
+        if data_len < len {
+            Err(ReadDataError::MissingData)
+        } else if data_len > len {
+            Err(ReadDataError::ExtraBytes(data_len - len))
+        } else if len > slice_len * elem_len {
+            Err(ReadDataError::TruncatedData)
+        } else {
+            Ok(slice_len)
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use super::{ReadDataError, ReadableElement};
+    use super::{ReadDataError, ReadableElement, CastableElement};
     use py_literal::Value as PyValue;
     use std::io::Cursor;
+
+    #[test]
+    fn view_i32() {
+        let elems = &[34234324, -980780878i32, 2849874];
+        let data = unsafe { std::slice::from_raw_parts(
+            elems.as_ptr().cast(),
+            elems.len() * std::mem::size_of::<i32>(),
+        ) };
+        let type_desc = PyValue::String(String::from("<i4"));
+        let out = <i32>::bytes_as_slice(data, &type_desc, data.len()).unwrap();
+        assert_eq!(out, elems);
+    }
 
     #[test]
     fn read_bool() {

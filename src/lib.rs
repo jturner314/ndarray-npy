@@ -43,8 +43,14 @@ mod npy;
 mod npz;
 
 pub use crate::npy::{
-    read_npy, write_npy, ReadDataError, ReadNpyError, ReadNpyExt, ReadableElement, WritableElement,
-    WriteDataError, WriteNpyError, WriteNpyExt,
+    read_npy,
+    ReadDataError, ReadNpyError,
+    ReadNpyExt, ViewNpyExt,
+    ReadableElement,
+    write_npy,
+    WriteDataError, WriteNpyError,
+    WriteNpyExt, ViewNpyMutExt,
+    WritableElement,
 };
 #[cfg(feature = "npz")]
 pub use crate::npz::{NpzReader, NpzWriter, ReadNpzError, WriteNpzError};
