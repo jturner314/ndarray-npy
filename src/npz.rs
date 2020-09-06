@@ -175,7 +175,7 @@ impl<R: Read + Seek> NpzReader<R> {
         })
     }
 
-    /// Returns `true` if the `.npz` file doesn't contain any arrays.
+    /// Returns `true` iff the `.npz` file doesn't contain any arrays.
     pub fn is_empty(&self) -> bool {
         self.zip.len() == 0
     }
