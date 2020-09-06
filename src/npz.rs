@@ -1,5 +1,7 @@
 use crate::{
-    ReadNpyError, ReadNpyExt, ReadableElement, WritableElement, WriteNpyError, WriteNpyExt,
+    ReadNpyError, ReadNpyExt, ReadableElement,
+    WritableElement, WriteNpyError, WriteNpyExt,
+    ViewNpyError,
 };
 use ndarray::prelude::*;
 use ndarray::{Data, DataOwned};
@@ -210,5 +212,44 @@ impl<R: Read + Seek> NpzReader<R> {
         D: Dimension,
     {
         Ok(ArrayBase::<S, D>::read_npy(self.zip.by_index(index)?)?)
+    }
+}
+
+/// An error viewing a `.npz` file.
+#[derive(Debug)]
+pub enum ViewNpzError {
+    /// An error caused by the zip archive.
+    Zip(ZipError),
+    /// An error caused by viewing an inner `.npy` file.
+    Npy(ViewNpyError),
+}
+
+impl Error for ViewNpzError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            ViewNpzError::Zip(err) => Some(err),
+            ViewNpzError::Npy(err) => Some(err),
+        }
+    }
+}
+
+impl fmt::Display for ViewNpzError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ViewNpzError::Zip(err) => write!(f, "zip file error: {}", err),
+            ViewNpzError::Npy(err) => write!(f, "error viewing npy file in npz archive: {}", err),
+        }
+    }
+}
+
+impl From<ZipError> for ViewNpzError {
+    fn from(err: ZipError) -> ViewNpzError {
+        ViewNpzError::Zip(err)
+    }
+}
+
+impl From<ViewNpyError> for ViewNpzError {
+    fn from(err: ViewNpyError) -> ViewNpzError {
+        ViewNpzError::Npy(err)
     }
 }

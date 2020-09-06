@@ -11,6 +11,7 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 use std::mem;
+use std::slice;
 
 /// Read an `.npy` file located at the specified path.
 ///
@@ -239,8 +240,6 @@ pub enum ReadDataError {
     WrongDescriptor(PyValue),
     /// The file does not contain all the data described in the header.
     MissingData,
-    /// The data length is no integral multiple of the element length.
-    TruncatedData,
     /// Extra bytes are present between the end of the data and the end of the
     /// file.
     ExtraBytes(usize),
@@ -254,7 +253,6 @@ impl Error for ReadDataError {
             ReadDataError::Io(err) => Some(err),
             ReadDataError::WrongDescriptor(_) => None,
             ReadDataError::MissingData => None,
-            ReadDataError::TruncatedData => None,
             ReadDataError::ExtraBytes(_) => None,
             ReadDataError::ParseData(err) => Some(&**err),
         }
@@ -269,8 +267,6 @@ impl fmt::Display for ReadDataError {
                 write!(f, "incorrect descriptor ({}) for this type", desc)
             }
             ReadDataError::MissingData => write!(f, "reached EOF before reading all data"),
-            ReadDataError::TruncatedData =>
-                write!(f, "data length is no integral multiple if element length"),
             ReadDataError::ExtraBytes(num_extra_bytes) => {
                 write!(f, "file had {} extra bytes before EOF", num_extra_bytes)
             }
@@ -328,8 +324,6 @@ pub enum ReadNpyError {
     WrongDescriptor(PyValue),
     /// The file does not contain all the data described in the header.
     MissingData,
-    /// The data length is no integral multiple of the element length.
-    TruncatedData,
     /// Extra bytes are present between the end of the data and the end of the
     /// file.
     ExtraBytes(usize),
@@ -345,7 +339,6 @@ impl Error for ReadNpyError {
             ReadNpyError::WrongNdim(_, _) => None,
             ReadNpyError::WrongDescriptor(_) => None,
             ReadNpyError::MissingData => None,
-            ReadNpyError::TruncatedData => None,
             ReadNpyError::ExtraBytes(_) => None,
         }
     }
@@ -367,8 +360,6 @@ impl fmt::Display for ReadNpyError {
                 write!(f, "incorrect descriptor ({}) for this type", desc)
             }
             ReadNpyError::MissingData => write!(f, "reached EOF before reading all data"),
-            ReadNpyError::TruncatedData => write!(f,
-                "data length is no integral multiple of element length"),
             ReadNpyError::ExtraBytes(num_extra_bytes) => {
                 write!(f, "file had {} extra bytes before EOF", num_extra_bytes)
             }
@@ -403,7 +394,6 @@ impl From<ReadDataError> for ReadNpyError {
             ReadDataError::Io(err) => ReadNpyError::Io(err),
             ReadDataError::WrongDescriptor(desc) => ReadNpyError::WrongDescriptor(desc),
             ReadDataError::MissingData => ReadNpyError::MissingData,
-            ReadDataError::TruncatedData => ReadNpyError::TruncatedData,
             ReadDataError::ExtraBytes(nbytes) => ReadNpyError::ExtraBytes(nbytes),
             ReadDataError::ParseData(err) => ReadNpyError::ParseData(err),
         }
@@ -475,7 +465,7 @@ macro_rules! impl_writable_primitive {
                 fn cast(self_: &$elem) -> &[u8] {
                     unsafe {
                         let ptr: *const $elem = self_;
-                        std::slice::from_raw_parts(ptr.cast::<u8>(), mem::size_of::<$elem>())
+                        slice::from_raw_parts(ptr.cast::<u8>(), mem::size_of::<$elem>())
                     }
                 }
                 writer.write_all(cast(self))?;
@@ -489,7 +479,7 @@ macro_rules! impl_writable_primitive {
                 // Function to ensure lifetime of bytes slice is correct.
                 fn cast(slice: &[$elem]) -> &[u8] {
                     unsafe {
-                        std::slice::from_raw_parts(
+                        slice::from_raw_parts(
                             slice.as_ptr().cast::<u8>(),
                             slice.len() * mem::size_of::<$elem>(),
                         )
@@ -544,13 +534,13 @@ macro_rules! impl_castable_primitive_one_byte {
                 bytes: &'a [u8],
                 type_desc: &PyValue,
                 len: usize,
-            ) -> Result<&'a [Self], ReadDataError> {
+            ) -> Result<&'a [Self], CastDataError> {
                 match *type_desc {
-                    PyValue::String(ref s) if $(s == $desc)||* =>
-                        Self::slice_len(bytes.len(), len).map(|len| unsafe {
-                            std::slice::from_raw_parts(bytes.as_ptr().cast(), len)
-                        }),
-                    ref other => Err(ReadDataError::WrongDescriptor(other.clone())),
+                    PyValue::String(ref s) if $(s == $desc)||* => {
+                        check_bytes_len::<Self>(bytes.len(), len)?;
+                        Ok(unsafe { slice::from_raw_parts(bytes.as_ptr().cast(), len) })
+                    },
+                    ref other => Err(CastDataError::WrongDescriptor(other.clone())),
                 }
             }
 
@@ -558,13 +548,13 @@ macro_rules! impl_castable_primitive_one_byte {
                 bytes: &'a mut [u8],
                 type_desc: &PyValue,
                 len: usize,
-            ) -> Result<&'a mut [Self], ReadDataError> {
+            ) -> Result<&'a mut [Self], CastDataError> {
                 match *type_desc {
-                    PyValue::String(ref s) if $(s == $desc)||* =>
-                        Self::slice_len(bytes.len(), len).map(|len| unsafe {
-                            std::slice::from_raw_parts_mut(bytes.as_mut_ptr().cast(), len)
-                        }),
-                    ref other => Err(ReadDataError::WrongDescriptor(other.clone())),
+                    PyValue::String(ref s) if $(s == $desc)||* => {
+                        check_bytes_len::<Self>(bytes.len(), len)?;
+                        Ok(unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr().cast(), len) })
+                    },
+                    ref other => Err(CastDataError::WrongDescriptor(other.clone())),
                 }
             }
         }
@@ -610,19 +600,21 @@ macro_rules! impl_readable_primitive_multi_byte {
 }
 
 macro_rules! impl_castable_primitive_multi_byte {
-    ($elem:ty, $little_desc:expr, $big_desc:expr) => {
+    ($elem:ty, $native_desc:expr) => {
         impl CastableElement for $elem {
             fn bytes_as_slice<'a>(
                 bytes: &'a [u8],
                 type_desc: &PyValue,
                 len: usize,
-            ) -> Result<&'a [Self], ReadDataError> {
+            ) -> Result<&'a [Self], CastDataError> {
                 match *type_desc {
-                    PyValue::String(ref s) if s == $little_desc || s == $big_desc =>
-                        Self::slice_len(bytes.len(), len).map(|len| unsafe {
-                            std::slice::from_raw_parts(bytes.as_ptr().cast(), len)
-                        }),
-                    ref other => Err(ReadDataError::WrongDescriptor(other.clone())),
+                    PyValue::String(ref s) => if s == $native_desc {
+                        check_bytes_len::<Self>(bytes.len(), len)?;
+                        Ok(unsafe { slice::from_raw_parts(bytes.as_ptr().cast(), len) })
+                    } else {
+                        Err(CastDataError::NonNativeEndian)
+                    },
+                    ref other => Err(CastDataError::WrongDescriptor(other.clone())),
                 }
             }
 
@@ -630,13 +622,15 @@ macro_rules! impl_castable_primitive_multi_byte {
                 bytes: &'a mut [u8],
                 type_desc: &PyValue,
                 len: usize,
-            ) -> Result<&'a mut [Self], ReadDataError> {
+            ) -> Result<&'a mut [Self], CastDataError> {
                 match *type_desc {
-                    PyValue::String(ref s) if s == $little_desc || s == $big_desc =>
-                        Self::slice_len(bytes.len(), len).map(|len| unsafe {
-                            std::slice::from_raw_parts_mut(bytes.as_mut_ptr().cast(), len)
-                        }),
-                    ref other => Err(ReadDataError::WrongDescriptor(other.clone())),
+                    PyValue::String(ref s) => if s == $native_desc {
+                        check_bytes_len::<Self>(bytes.len(), len)?;
+                        Ok(unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr().cast(), len) })
+                    } else {
+                        Err(CastDataError::NonNativeEndian)
+                    },
+                    ref other => Err(CastDataError::WrongDescriptor(other.clone())),
                 }
             }
         }
@@ -647,7 +641,10 @@ macro_rules! impl_primitive_multi_byte {
     ($elem:ty, $little_desc:expr, $big_desc:expr, $zero:expr, $read_into:ident) => {
         impl_writable_primitive!($elem, $little_desc, $big_desc);
         impl_readable_primitive_multi_byte!($elem, $little_desc, $big_desc, $zero, $read_into);
-        impl_castable_primitive_multi_byte!($elem, $little_desc, $big_desc);
+        #[cfg(target_endian = "little")]
+        impl_castable_primitive_multi_byte!($elem, $little_desc);
+        #[cfg(target_endian = "big")]
+        impl_castable_primitive_multi_byte!($elem, $big_desc);
     };
 }
 
@@ -739,27 +736,33 @@ impl ReadableElement for bool {
 // can just cast the data in-place.
 impl_writable_primitive!(bool, "|b1", "|b1");
 
+impl From<ParseBoolError> for CastDataError {
+    fn from(err: ParseBoolError) -> CastDataError {
+        CastDataError::ParseData(Box::new(err))
+    }
+}
+
 impl CastableElement for bool {
     fn bytes_as_slice<'a>(
         bytes: &'a [u8],
         type_desc: &PyValue,
         len: usize,
-    ) -> Result<&'a [Self], ReadDataError> {
+    ) -> Result<&'a [Self], CastDataError> {
         match *type_desc {
             PyValue::String(ref s) if s == "|b1" => {
-                let len = Self::slice_len(bytes.len(), len)?;
+                check_bytes_len::<Self>(bytes.len(), len)?;
                 // Check that all the data is valid, because creating a `bool`
                 // with an invalid value is undefined behavior. Rust guarantees
                 // that `false` is represented as `0x00` and `true` is
                 // represented as `0x01`.
                 for &byte in bytes {
                     if byte > 1 {
-                        return Err(ReadDataError::from(ParseBoolError { bad_value: byte }));
+                        return Err(CastDataError::from(ParseBoolError { bad_value: byte }));
                     }
                 }
-                Ok(unsafe { std::slice::from_raw_parts(bytes.as_ptr().cast(), len) })
+                Ok(unsafe { slice::from_raw_parts(bytes.as_ptr().cast(), len) })
             },
-            ref other => Err(ReadDataError::WrongDescriptor(other.clone())),
+            ref other => Err(CastDataError::WrongDescriptor(other.clone())),
         }
     }
 
@@ -767,22 +770,120 @@ impl CastableElement for bool {
         bytes: &'a mut [u8],
         type_desc: &PyValue,
         len: usize,
-    ) -> Result<&'a mut [Self], ReadDataError> {
+    ) -> Result<&'a mut [Self], CastDataError> {
         match *type_desc {
             PyValue::String(ref s) if s == "|b1" => {
-                let len = Self::slice_len(bytes.len(), len)?;
+                check_bytes_len::<Self>(bytes.len(), len)?;
                 // Check that all the data is valid, because creating a `bool`
                 // with an invalid value is undefined behavior. Rust guarantees
                 // that `false` is represented as `0x00` and `true` is
                 // represented as `0x01`.
                 for &byte in bytes as &_ {
                     if byte > 1 {
-                        return Err(ReadDataError::from(ParseBoolError { bad_value: byte }));
+                        return Err(CastDataError::from(ParseBoolError { bad_value: byte }));
                     }
                 }
-                Ok(unsafe { std::slice::from_raw_parts_mut(bytes.as_mut_ptr().cast(), len) })
+                Ok(unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr().cast(), len) })
             },
-            ref other => Err(ReadDataError::WrongDescriptor(other.clone())),
+            ref other => Err(CastDataError::WrongDescriptor(other.clone())),
+        }
+    }
+}
+
+/// An error viewing a `.npy` file.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum ViewNpyError {
+    /// An error caused by I/O.
+    Io(io::Error),
+    /// An error parsing the file header.
+    ParseHeader(ParseHeaderError),
+    /// An error parsing the data.
+    ParseData(Box<dyn Error + Send + Sync + 'static>),
+    /// Overflow while computing the length of the array from the shape
+    /// described in the file header.
+    LengthOverflow,
+    /// An error caused by incorrect `Dimension` type.
+    WrongNdim(Option<usize>, usize),
+    /// The type descriptor does not match the element type.
+    WrongDescriptor(PyValue),
+    /// The file does not contain all the data described in the header.
+    MissingBytes(usize),
+    /// Extra bytes are present between the end of the data and the end of the
+    /// file.
+    ExtraBytes(usize),
+    /// Cannot cast array data in non-native endianness.
+    NonNativeEndian,
+}
+
+impl Error for ViewNpyError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            ViewNpyError::Io(err) => Some(err),
+            ViewNpyError::ParseHeader(err) => Some(err),
+            ViewNpyError::ParseData(err) => Some(&**err),
+            ViewNpyError::LengthOverflow => None,
+            ViewNpyError::WrongNdim(_, _) => None,
+            ViewNpyError::WrongDescriptor(_) => None,
+            ViewNpyError::MissingBytes(_) => None,
+            ViewNpyError::ExtraBytes(_) => None,
+            ViewNpyError::NonNativeEndian => None,
+        }
+    }
+}
+
+impl fmt::Display for ViewNpyError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ViewNpyError::Io(err) => write!(f, "I/O error: {}", err),
+            ViewNpyError::ParseHeader(err) => write!(f, "error parsing header: {}", err),
+            ViewNpyError::ParseData(err) => write!(f, "error parsing data: {}", err),
+            ViewNpyError::LengthOverflow => write!(f, "overflow computing length from shape"),
+            ViewNpyError::WrongNdim(expected, actual) => write!(
+                f,
+                "ndim {} of array did not match Dimension type with NDIM = {:?}",
+                actual, expected
+            ),
+            ViewNpyError::WrongDescriptor(desc) => {
+                write!(f, "incorrect descriptor ({}) for this type", desc)
+            }
+            ViewNpyError::MissingBytes(num_missing_bytes) => {
+                write!(f, "reached EOF {} before reading all data", num_missing_bytes)
+            },
+            ViewNpyError::ExtraBytes(num_extra_bytes) => {
+                write!(f, "file had {} extra bytes before EOF", num_extra_bytes)
+            }
+            ViewNpyError::NonNativeEndian => {
+                write!(f, "cannot cast array data in non-native endianness")
+            },
+        }
+    }
+}
+
+impl From<ReadHeaderError> for ViewNpyError {
+    fn from(err: ReadHeaderError) -> ViewNpyError {
+        match err {
+            ReadHeaderError::Io(err) => ViewNpyError::Io(err),
+            ReadHeaderError::Parse(err) => ViewNpyError::ParseHeader(err),
+        }
+    }
+}
+
+impl From<ParseHeaderError> for ViewNpyError {
+    fn from(err: ParseHeaderError) -> ViewNpyError {
+        ViewNpyError::ParseHeader(err)
+    }
+}
+
+impl From<CastDataError> for ViewNpyError {
+    fn from(err: CastDataError) -> ViewNpyError {
+        match err {
+            CastDataError::WrongDescriptor(desc) => ViewNpyError::WrongDescriptor(desc),
+            CastDataError::LengthOverflow => ViewNpyError::LengthOverflow,
+            CastDataError::MissingBytes(nbytes) => ViewNpyError::MissingBytes(nbytes),
+            CastDataError::ExtraBytes(nbytes) => ViewNpyError::ExtraBytes(nbytes),
+            CastDataError::NonNativeEndian => ViewNpyError::NonNativeEndian,
+            CastDataError::ParseData(err) => ViewNpyError::ParseData(err),
         }
     }
 }
@@ -792,7 +893,7 @@ pub trait ViewNpyExt<'a>: Sized {
     /// Returns a read-only view of a memory-mapped `.npy` file.
     ///
     /// **Note:** Iterates over `bool` array to ensure `0x00`/`0x01` values.
-    fn view_npy(buf: &'a [u8]) -> Result<Self, ReadNpyError>;
+    fn view_npy(buf: &'a [u8]) -> Result<Self, ViewNpyError>;
 }
 
 /// Extension trait for read-write `ArrayViewMut` of memory-mapped `.npy` files.
@@ -800,7 +901,7 @@ pub trait ViewNpyMutExt<'a>: Sized {
     /// Returns a read-write view of a memory-mapped `.npy` file.
     ///
     /// **Note:** Iterates over `bool` array to ensure `0x00`/`0x01` values.
-    fn view_npy_mut(buf: &'a mut [u8]) -> Result<Self, ReadNpyError>;
+    fn view_npy_mut(buf: &'a mut [u8]) -> Result<Self, ViewNpyError>;
 }
 
 impl<'a, A, D> ViewNpyExt<'a> for ArrayView<'a, A, D>
@@ -808,20 +909,20 @@ where
     A: CastableElement,
     D: Dimension,
 {
-    fn view_npy(buf: &'a [u8]) -> Result<Self, ReadNpyError> {
+    fn view_npy(buf: &'a [u8]) -> Result<Self, ViewNpyError> {
         let mut reader = buf;
         let header = Header::from_reader(&mut reader)?;
         let shape = header.shape.into_dimension();
         let ndim = shape.ndim();
         let len = match shape.size_checked() {
             Some(len) if len <= std::isize::MAX as usize => len,
-            _ => return Err(ReadNpyError::LengthOverflow),
+            _ => return Err(ViewNpyError::LengthOverflow),
         };
         let data = A::bytes_as_slice(&reader, &header.type_descriptor, len)?;
         ArrayView::from_shape(shape.set_f(header.fortran_order), data)
             .unwrap()
             .into_dimensionality()
-            .map_err(|_| ReadNpyError::WrongNdim(D::NDIM, ndim))
+            .map_err(|_| ViewNpyError::WrongNdim(D::NDIM, ndim))
     }
 }
 
@@ -830,114 +931,175 @@ where
     A: CastableElement,
     D: Dimension,
 {
-    fn view_npy_mut(buf: &'a mut [u8]) -> Result<Self, ReadNpyError> {
+    fn view_npy_mut(buf: &'a mut [u8]) -> Result<Self, ViewNpyError> {
         let mut reader = buf as &[u8];
         let header = Header::from_reader(&mut reader)?;
         let shape = header.shape.into_dimension();
         let ndim = shape.ndim();
         let len = match shape.size_checked() {
             Some(len) if len <= std::isize::MAX as usize => len,
-            _ => return Err(ReadNpyError::LengthOverflow),
+            _ => return Err(ViewNpyError::LengthOverflow),
         };
         let mid = buf.len() - reader.len();
         let data = A::bytes_as_slice_mut(&mut buf[mid..], &header.type_descriptor, len)?;
         ArrayViewMut::from_shape(shape.set_f(header.fortran_order), data)
             .unwrap()
             .into_dimensionality()
-            .map_err(|_| ReadNpyError::WrongNdim(D::NDIM, ndim))
+            .map_err(|_| ViewNpyError::WrongNdim(D::NDIM, ndim))
+    }
+}
+
+/// An error casting array data.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum CastDataError {
+    /// The type descriptor does not match the element type.
+    WrongDescriptor(PyValue),
+    /// Overflow while computing the length of the array from the shape
+    /// described in the file header.
+    LengthOverflow,
+    /// The file does not contain all the data described in the header.
+    MissingBytes(usize),
+    /// Extra bytes are present between the end of the data and the end of the
+    /// file.
+    ExtraBytes(usize),
+    /// Cannot cast array data in non-native endianness.
+    NonNativeEndian,
+    /// An error parsing the data.
+    ParseData(Box<dyn Error + Send + Sync + 'static>),
+}
+
+impl Error for CastDataError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            CastDataError::WrongDescriptor(_) => None,
+            CastDataError::LengthOverflow => None,
+            CastDataError::MissingBytes(_) => None,
+            CastDataError::ExtraBytes(_) => None,
+            CastDataError::NonNativeEndian => None,
+            CastDataError::ParseData(err) => Some(&**err),
+        }
+    }
+}
+
+impl fmt::Display for CastDataError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            CastDataError::WrongDescriptor(desc) => {
+                write!(f, "incorrect descriptor ({}) for this type", desc)
+            }
+            CastDataError::LengthOverflow => {
+                write!(f, "overflow computing length from shape")
+            },
+            CastDataError::MissingBytes(num_missing_bytes) => {
+                write!(f, "reached EOF {} bytes before casting all data", num_missing_bytes)
+            },
+            CastDataError::ExtraBytes(num_extra_bytes) => {
+                write!(f, "file had {} extra bytes before EOF", num_extra_bytes)
+            }
+            CastDataError::NonNativeEndian => {
+                write!(f, "cannot cast array data in non-native endianness")
+            },
+            CastDataError::ParseData(err) => write!(f, "error parsing data: {}", err),
+        }
     }
 }
 
 /// An array element type that can be cast from an `.npy` or uncompressed `.npz` file.
+///
+/// These methods should return `Err(_)` in at least the following cases:
+///
+///   * if the `type_desc` does not match `Self`
+///   * if the `bytes` slice has fewer elements than `len`
+///   * if the `bytes` slice has extra bytes after reading `len` elements
+///   * if the `bytes` slice is not in native endianness
 pub trait CastableElement: Sized {
     /// Casts `bytes` as slice of elements of length `len`.
-    ///
-    /// This method should invoke `slice_len()` before casting.
     fn bytes_as_slice<'a>(
         bytes: &'a [u8],
         type_desc: &PyValue,
         len: usize,
-    ) -> Result<&'a [Self], ReadDataError>;
+    ) -> Result<&'a [Self], CastDataError>;
 
     /// Casts `bytes` as mutable slice of elements of length `len`.
-    ///
-    /// This method should invoke `slice_len()` before casting.
     fn bytes_as_slice_mut<'a>(
         bytes: &'a mut [u8],
         type_desc: &PyValue,
         len: usize,
-    ) -> Result<&'a mut [Self], ReadDataError>;
+    ) -> Result<&'a mut [Self], CastDataError>;
+}
 
-    /// Verifies lengths before computing slice length.
-    ///
-    /// Ensures:
-    ///
-    ///   * `data_len` equals `len` extracted from header.
-    ///   * `data_len` is an integral multiple of its element length.
-    fn slice_len<'a>(
-        data_len: usize,
-        len: usize,
-    ) -> Result<usize, ReadDataError> {
-        let elem_len = mem::size_of::<Self>();
-        let slice_len = len / elem_len;
-        if data_len < len {
-            Err(ReadDataError::MissingData)
-        } else if data_len > len {
-            Err(ReadDataError::ExtraBytes(data_len - len))
-        } else if len > slice_len * elem_len {
-            Err(ReadDataError::TruncatedData)
-        } else {
-            Ok(slice_len)
-        }
+/// Returns `Ok(_)` iff a slice containing `bytes_len` bytes is the correct length to cast to
+/// a slice with element type `T` and length `len`.
+pub fn check_bytes_len<T>(bytes_len: usize, len: usize) -> Result<(), CastDataError> {
+    let needed_bytes = len
+        .checked_mul(mem::size_of::<T>())
+        .ok_or(CastDataError::LengthOverflow)?;
+    if bytes_len < needed_bytes {
+        Err(CastDataError::MissingBytes(needed_bytes - bytes_len))
+    } else if bytes_len > needed_bytes {
+        Err(CastDataError::ExtraBytes(bytes_len - needed_bytes))
+    } else {
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{ReadDataError, ReadableElement, CastableElement};
+    use super::{ReadDataError, ReadableElement, CastDataError, CastableElement};
     use py_literal::Value as PyValue;
     use std::io::Cursor;
+    use std::mem;
+    use std::slice;
 
     #[test]
     fn view_i32() {
         let elems = &[34234324, -980780878i32, 2849874];
-        let data = unsafe { std::slice::from_raw_parts(
+        let data = unsafe { slice::from_raw_parts(
             elems.as_ptr().cast(),
-            elems.len() * std::mem::size_of::<i32>(),
+            elems.len() * mem::size_of::<i32>(),
         ) };
+        #[cfg(target_endian = "little")]
         let type_desc = PyValue::String(String::from("<i4"));
-        let out = <i32>::bytes_as_slice(data, &type_desc, data.len()).unwrap();
+        #[cfg(target_endian = "big")]
+        let type_desc = PyValue::String(String::from(">i4"));
+        let out = <i32>::bytes_as_slice(data, &type_desc, elems.len()).unwrap();
         assert_eq!(out, elems);
-    }
-
-    #[test]
-    fn view_i32_truncated_data() {
-        let elems = &[34234324, -980780878i32, 2849874];
-        let data = unsafe { std::slice::from_raw_parts(
-            elems.as_ptr().cast(),
-            // Truncate data by `1` byte affecting also its length in header.
-            elems.len() * std::mem::size_of::<i32>() - 1,
-        ) };
-        let type_desc = PyValue::String(String::from("<i4"));
-        let out = <i32>::bytes_as_slice(&data, &type_desc, data.len());
-        match out.err() {
-           Some(ReadDataError::TruncatedData) => {},
-           _ => panic!(),
-        }
     }
 
     #[test]
     fn view_i32_mut() {
         let elems = &mut [34234324, -980780878i32, 2849874];
-        let data = unsafe { std::slice::from_raw_parts_mut(
+        let data = unsafe { slice::from_raw_parts_mut(
             elems.as_mut_ptr().cast(),
-            elems.len() * std::mem::size_of::<i32>(),
+            elems.len() * mem::size_of::<i32>(),
         ) };
+        #[cfg(target_endian = "little")]
         let type_desc = PyValue::String(String::from("<i4"));
-        let out = <i32>::bytes_as_slice_mut(data, &type_desc, data.len()).unwrap();
+        #[cfg(target_endian = "big")]
+        let type_desc = PyValue::String(String::from(">i4"));
+        let out = <i32>::bytes_as_slice_mut(data, &type_desc, elems.len()).unwrap();
         out[2] += 1;
         assert_eq!(out, elems);
         assert_eq!(elems[2], 2849875);
+    }
+
+    #[test]
+    fn view_i32_non_native_endian() {
+        let elems = &[34234324, -980780878i32, 2849874];
+        let data = unsafe { slice::from_raw_parts(
+           elems.as_ptr().cast(),
+           elems.len() * mem::size_of::<i32>(),
+        ) };
+        #[cfg(target_endian = "little")]
+        let type_desc = PyValue::String(String::from(">i4"));
+        #[cfg(target_endian = "big")]
+        let type_desc = PyValue::String(String::from("<i4"));
+        let out = <i32>::bytes_as_slice(&data, &type_desc, elems.len());
+        match out.err() {
+            Some(CastDataError::NonNativeEndian) => {},
+            _ => panic!(),
+        }
     }
 
     #[test]
@@ -953,7 +1115,7 @@ mod test {
         let data = &[0x00, 0x01, 0x05, 0x00, 0x01];
         let type_desc = PyValue::String(String::from("|b1"));
         match <bool>::bytes_as_slice(data, &type_desc, data.len()) {
-            Err(ReadDataError::ParseData(err)) => {
+            Err(CastDataError::ParseData(err)) => {
                 assert_eq!(format!("{}", err), "error parsing value 0x05 as a bool");
             }
             _ => panic!(),
@@ -977,7 +1139,7 @@ mod test {
         let len = data.len();
         let type_desc = PyValue::String(String::from("|b1"));
         match <bool>::bytes_as_slice_mut(data, &type_desc, len) {
-            Err(ReadDataError::ParseData(err)) => {
+            Err(CastDataError::ParseData(err)) => {
                 assert_eq!(format!("{}", err), "error parsing value 0x05 as a bool");
             }
             _ => panic!(),

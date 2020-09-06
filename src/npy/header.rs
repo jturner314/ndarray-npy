@@ -95,6 +95,7 @@ impl From<PyValueParseError> for ParseHeaderError {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ReadHeaderError {
     Io(io::Error),
     Parse(ParseHeaderError),
@@ -281,6 +282,7 @@ impl From<PyValueFormatError> for FormatHeaderError {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum WriteHeaderError {
     Io(io::Error),
     Format(FormatHeaderError),
