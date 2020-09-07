@@ -600,7 +600,7 @@ macro_rules! impl_readable_primitive_multi_byte {
 }
 
 macro_rules! impl_castable_primitive_multi_byte {
-    ($elem:ty, $native_desc:expr) => {
+    ($elem:ty, $native_desc:expr, $non_native_desc:expr) => {
         impl CastableElement for $elem {
             fn bytes_as_slice<'a>(
                 bytes: &'a [u8],
@@ -608,10 +608,11 @@ macro_rules! impl_castable_primitive_multi_byte {
                 len: usize,
             ) -> Result<&'a [Self], CastDataError> {
                 match *type_desc {
-                    PyValue::String(ref s) => if s == $native_desc {
+                    PyValue::String(ref s) if s == $native_desc => {
                         check_bytes_len::<Self>(bytes.len(), len)?;
                         Ok(unsafe { slice::from_raw_parts(bytes.as_ptr().cast(), len) })
-                    } else {
+                    },
+                    PyValue::String(ref s) if s == $non_native_desc => {
                         Err(CastDataError::NonNativeEndian)
                     },
                     ref other => Err(CastDataError::WrongDescriptor(other.clone())),
@@ -624,10 +625,11 @@ macro_rules! impl_castable_primitive_multi_byte {
                 len: usize,
             ) -> Result<&'a mut [Self], CastDataError> {
                 match *type_desc {
-                    PyValue::String(ref s) => if s == $native_desc {
+                    PyValue::String(ref s) if s == $native_desc => {
                         check_bytes_len::<Self>(bytes.len(), len)?;
                         Ok(unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr().cast(), len) })
-                    } else {
+                    },
+                    PyValue::String(ref s) if s == $non_native_desc => {
                         Err(CastDataError::NonNativeEndian)
                     },
                     ref other => Err(CastDataError::WrongDescriptor(other.clone())),
@@ -642,9 +644,9 @@ macro_rules! impl_primitive_multi_byte {
         impl_writable_primitive!($elem, $little_desc, $big_desc);
         impl_readable_primitive_multi_byte!($elem, $little_desc, $big_desc, $zero, $read_into);
         #[cfg(target_endian = "little")]
-        impl_castable_primitive_multi_byte!($elem, $little_desc);
+        impl_castable_primitive_multi_byte!($elem, $little_desc, $big_desc);
         #[cfg(target_endian = "big")]
-        impl_castable_primitive_multi_byte!($elem, $big_desc);
+        impl_castable_primitive_multi_byte!($elem, $big_desc, $little_desc);
     };
 }
 
