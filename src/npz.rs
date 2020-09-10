@@ -9,7 +9,7 @@ use std::error::Error;
 use std::convert::TryInto;
 use std::fmt;
 use std::io::{self, Cursor, Read, Seek, Write};
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use zip::result::ZipError;
 use zip::write::FileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -311,21 +311,33 @@ impl<'a> NpzView<'a> {
         let mut names = HashMap::new();
         for index in 0..zip.len() {
             let file = zip.by_index(index)?;
+            // Skip compressed files.
             if file.compression() != CompressionMethod::Stored {
                 continue;
             }
+            // Store file index by file names.
             let name = file.name().to_string();
+            names.insert(name, index);
+            // Get data slice.
             let data_start: usize = file.data_start().try_into()
                 .map_err(|_| ViewNpyError::LengthOverflow)?;
             let size: usize = file.size().try_into()
                 .map_err(|_| ViewNpyError::LengthOverflow)?;
             let data_end = data_start.checked_add(size)
                 .ok_or(ViewNpyError::LengthOverflow)?;
-            let bytes = bytes.get(data_start..data_end)
+            let data = bytes.get(data_start..data_end)
                 .ok_or(ViewNpyError::LengthOverflow)?;
-            let crc32 = file.crc32();
-            files.insert(index, NpyView { bytes, crc32 });
-            names.insert(name, index);
+            // Get central CRC-32 slice.
+            let central_header_start: usize = file.central_header_start().try_into()
+                .map_err(|_| ViewNpyError::LengthOverflow)?;
+            let central_crc32_start = central_header_start.checked_add(16)
+                .ok_or(ViewNpyError::LengthOverflow)?;
+            let central_crc32_end = central_crc32_start.checked_add(4)
+                .ok_or(ViewNpyError::LengthOverflow)?;
+            let central_crc32 = bytes.get(central_crc32_start..central_crc32_end)
+                .ok_or(ViewNpyError::LengthOverflow)?;
+            // Store file view by file index.
+            files.insert(index, NpyView { data, central_crc32 });
         }
         Ok(Self { files, names })
     }
@@ -361,14 +373,15 @@ impl<'a> NpzView<'a> {
 /// **Note:** Does **not** automatically `verify()` CRC-32 checksum.
 #[derive(Debug, Clone, Copy)]
 pub struct NpyView<'a> {
-    bytes: &'a [u8],
-    crc32: u32,
+    data: &'a [u8],
+    central_crc32: &'a [u8],
 }
 
 impl<'a> NpyView<'a> {
     /// Verifies CRC-32 checksum by reading the whole array.
     pub fn verify(&self) -> Result<(), ViewNpzError> {
-        Ok(crc32_verify(&self.bytes, self.crc32)?)
+        // Like the `zip` crate, verify only against central CRC-32.
+        Ok(crc32_verify(self.data, self.central_crc32)?)
     }
 
     /// Returns a read-only view of a memory-mapped `.npy` file.
@@ -379,7 +392,7 @@ impl<'a> NpyView<'a> {
         A: CastableElement,
         D: Dimension,
     {
-        Ok(ArrayView::view_npy(self.bytes)?)
+        Ok(ArrayView::view_npy(self.data)?)
     }
 }
 
@@ -416,8 +429,86 @@ pub struct NpzViewMut<'a> {
 
 impl<'a> NpzViewMut<'a> {
     /// Creates a new read-write view of a memory-mapped `.npz` file.
-    pub fn new(_bytes: &'a mut [u8]) -> Result<Self, ViewNpzError> {
-        todo!("requires upcoming `zip = \"0.5.8\"`"); // TODO
+    pub fn new(mut bytes: &'a mut [u8]) -> Result<Self, ViewNpzError> {
+        let mut zip = ZipArchive::new(Cursor::new(&bytes))?;
+        let mut names = HashMap::new();
+        let mut ranges = HashMap::new();
+        let mut splits = BTreeMap::new();
+        for index in 0..zip.len() {
+            let file = zip.by_index(index)?;
+            // Skip compressed files.
+            if file.compression() != CompressionMethod::Stored {
+                continue;
+            }
+            // Store file index by file names.
+            let name = file.name().to_string();
+            names.insert(name, index);
+            // Get local CRC-32 range.
+            let header_start: usize = file.header_start().try_into()
+                .map_err(|_| ViewNpyError::LengthOverflow)?;
+            let crc32_start = header_start.checked_add(14)
+                .ok_or(ViewNpyError::LengthOverflow)?;
+            let crc32_end = crc32_start.checked_add(4)
+                .ok_or(ViewNpyError::LengthOverflow)?;
+            let crc32 = crc32_start..crc32_end;
+            // Get data range.
+            let data_start: usize = file.data_start().try_into()
+                .map_err(|_| ViewNpyError::LengthOverflow)?;
+            let size: usize = file.size().try_into()
+                .map_err(|_| ViewNpyError::LengthOverflow)?;
+            let data_end = data_start.checked_add(size)
+                .ok_or(ViewNpyError::LengthOverflow)?;
+            let data = data_start..data_end;
+            // Get central CRC-32 range.
+            let central_header_start: usize = file.central_header_start().try_into()
+                .map_err(|_| ViewNpyError::LengthOverflow)?;
+            let central_crc32_start = central_header_start.checked_add(16)
+                .ok_or(ViewNpyError::LengthOverflow)?;
+            let central_crc32_end = central_crc32_start.checked_add(4)
+                .ok_or(ViewNpyError::LengthOverflow)?;
+            let central_crc32 = central_crc32_start..central_crc32_end;
+            // Sort ranges by their starts. Ensure range starts are unique to catch
+            // panic on malformed zip archives.
+            if splits.insert(crc32.start, crc32.end).is_some() {
+                Err(ZipError::InvalidArchive("Ambiguous CRC-32 range"))?;
+            }
+            if splits.insert(data.start, data.end).is_some() {
+                Err(ZipError::InvalidArchive("Ambiguous data range"))?;
+            }
+            if splits.insert(central_crc32.start, central_crc32.end).is_some() {
+                Err(ZipError::InvalidArchive("Ambiguous central CRC-32 range"))?;
+            }
+            // Store ranges by file index.
+            ranges.insert(index, (crc32, data, central_crc32));
+        }
+        // Ensure ranges do not overlap to catch panic on malformed zip archive.
+        let mut last_end = 0;
+        for (&start, &end) in &splits {
+            if start < last_end {
+                Err(ZipError::InvalidArchive("Overlapping ranges"))?;
+            }
+            last_end = end;
+        }
+        // Split and store borrows by their range starts.
+        let mut offset = 0;
+        let mut slices = HashMap::new();
+        for (&start, &end) in &splits {
+            let (slice, remaining_bytes) = bytes.split_at_mut(start - offset);
+            offset += slice.len();
+            let (slice, remaining_bytes) = remaining_bytes.split_at_mut(end - offset);
+            offset += slice.len();
+            slices.insert(start, slice);
+            bytes = remaining_bytes;
+        }
+        // Collect split borrows as file views.
+        let mut files = HashMap::new();
+        for (&index, (crc32, data, central_crc32)) in &ranges {
+            let crc32 = slices.remove(&crc32.start).unwrap();
+            let data = slices.remove(&data.start).unwrap();
+            let central_crc32 = slices.remove(&central_crc32.start).unwrap();
+            files.insert(index, NpyViewMut { crc32, data, central_crc32 });
+        }
+        Ok(Self { files, names })
     }
 
     /// Returns `true` iff the `.npz` file doesn't contain any **uncompressed** arrays.
@@ -456,16 +547,16 @@ impl<'a> NpzViewMut<'a> {
 /// **Note:** Does automatically `update()` CRC-32 checksum on `drop()`.
 #[derive(Debug)]
 pub struct NpyViewMut<'a> {
-    bytes: &'a mut [u8],
-    crc32_central: &'a mut [u8],
-    crc32_local: &'a mut [u8],
-    crc32: u32,
+    crc32: &'a mut [u8],
+    data: &'a mut [u8],
+    central_crc32: &'a mut [u8],
 }
 
 impl<'a> NpyViewMut<'a> {
     /// Verifies CRC-32 checksum by reading the whole array.
     pub fn verify(&self) -> Result<(), ViewNpzError> {
-        Ok(crc32_verify(&self.bytes, self.crc32)?)
+        // Like the `zip` crate, verify only against central CRC-32.
+        Ok(crc32_verify(self.data, self.central_crc32)?)
     }
 
     /// Returns a read-only view of a memory-mapped `.npy` file.
@@ -476,7 +567,7 @@ impl<'a> NpyViewMut<'a> {
         A: CastableElement,
         D: Dimension,
     {
-        Ok(ArrayView::<A, D>::view_npy(self.bytes)?)
+        Ok(ArrayView::<A, D>::view_npy(self.data)?)
     }
 
     /// Returns a read-write view of a memory-mapped `.npy` file.
@@ -487,16 +578,15 @@ impl<'a> NpyViewMut<'a> {
         A: CastableElement,
         D: Dimension,
     {
-        Ok(ArrayViewMut::<A, D>::view_npy_mut(self.bytes)?)
+        Ok(ArrayViewMut::<A, D>::view_npy_mut(self.data)?)
     }
 
     /// Updates CRC-32 checksum by reading the whole array.
     ///
     /// **Note:** Automatically updated on `drop()`.
     pub fn update(&mut self) {
-        self.crc32 = crc32_update(&self.bytes);
-        self.crc32_local.copy_from_slice(&self.crc32.to_le_bytes());
-        self.crc32_central.copy_from_slice(self.crc32_local);
+        self.central_crc32.copy_from_slice(&crc32_update(&self.data));
+        self.crc32.copy_from_slice(self.central_crc32);
     }
 }
 
@@ -506,7 +596,7 @@ impl<'a> Drop for NpyViewMut<'a> {
     }
 }
 
-fn crc32_verify(bytes: &[u8], crc32: u32) -> Result<(), ZipError> {
+fn crc32_verify(bytes: &[u8], crc32: &[u8]) -> Result<(), ZipError> {
     if crc32_update(bytes) == crc32 {
         Ok(())
     } else {
@@ -514,8 +604,8 @@ fn crc32_verify(bytes: &[u8], crc32: u32) -> Result<(), ZipError> {
     }
 }
 
-fn crc32_update(bytes: &[u8]) -> u32 {
+fn crc32_update(bytes: &[u8]) -> [u8; 4] {
     let mut hasher = Hasher::new();
     hasher.update(bytes);
-    hasher.finalize()
+    hasher.finalize().to_le_bytes()
 }
