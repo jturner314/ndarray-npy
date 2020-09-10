@@ -48,4 +48,8 @@ pub use crate::npy::{
     CastDataError, ViewNpyError, ViewNpyExt, ViewNpyMutExt, CastableElement,
 };
 #[cfg(feature = "npz")]
-pub use crate::npz::{NpzReader, NpzWriter, ReadNpzError, WriteNpzError, ViewNpzError};
+pub use crate::npz::{
+	ReadNpzError, NpzReader,
+	WriteNpzError, NpzWriter,
+	ViewNpzError, NpzView, NpzViewMut, NpyView, NpyViewMut,
+};

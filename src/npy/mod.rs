@@ -538,6 +538,7 @@ macro_rules! impl_castable_primitive_one_byte {
                 match *type_desc {
                     PyValue::String(ref s) if $(s == $desc)||* => {
                         check_bytes_len::<Self>(bytes.len(), len)?;
+                        check_bytes_align::<Self>(bytes)?;
                         Ok(unsafe { slice::from_raw_parts(bytes.as_ptr().cast(), len) })
                     },
                     ref other => Err(CastDataError::WrongDescriptor(other.clone())),
@@ -552,6 +553,7 @@ macro_rules! impl_castable_primitive_one_byte {
                 match *type_desc {
                     PyValue::String(ref s) if $(s == $desc)||* => {
                         check_bytes_len::<Self>(bytes.len(), len)?;
+                        check_bytes_align::<Self>(bytes)?;
                         Ok(unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr().cast(), len) })
                     },
                     ref other => Err(CastDataError::WrongDescriptor(other.clone())),
@@ -610,6 +612,7 @@ macro_rules! impl_castable_primitive_multi_byte {
                 match *type_desc {
                     PyValue::String(ref s) if s == $native_desc => {
                         check_bytes_len::<Self>(bytes.len(), len)?;
+                        check_bytes_align::<Self>(bytes)?;
                         Ok(unsafe { slice::from_raw_parts(bytes.as_ptr().cast(), len) })
                     },
                     PyValue::String(ref s) if s == $non_native_desc => {
@@ -627,6 +630,7 @@ macro_rules! impl_castable_primitive_multi_byte {
                 match *type_desc {
                     PyValue::String(ref s) if s == $native_desc => {
                         check_bytes_len::<Self>(bytes.len(), len)?;
+                        check_bytes_align::<Self>(bytes)?;
                         Ok(unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr().cast(), len) })
                     },
                     PyValue::String(ref s) if s == $non_native_desc => {
@@ -753,6 +757,7 @@ impl CastableElement for bool {
         match *type_desc {
             PyValue::String(ref s) if s == "|b1" => {
                 check_bytes_len::<Self>(bytes.len(), len)?;
+                check_bytes_align::<Self>(bytes)?;
                 // Check that all the data is valid, because creating a `bool`
                 // with an invalid value is undefined behavior. Rust guarantees
                 // that `false` is represented as `0x00` and `true` is
@@ -776,6 +781,7 @@ impl CastableElement for bool {
         match *type_desc {
             PyValue::String(ref s) if s == "|b1" => {
                 check_bytes_len::<Self>(bytes.len(), len)?;
+                check_bytes_align::<Self>(bytes)?;
                 // Check that all the data is valid, because creating a `bool`
                 // with an invalid value is undefined behavior. Rust guarantees
                 // that `false` is represented as `0x00` and `true` is
@@ -816,6 +822,8 @@ pub enum ViewNpyError {
     ExtraBytes(usize),
     /// Cannot cast array data in non-native endianness.
     NonNativeEndian,
+    /// Cannot cast unaligned array data.
+    UnalignedBytes,
 }
 
 impl Error for ViewNpyError {
@@ -830,6 +838,7 @@ impl Error for ViewNpyError {
             ViewNpyError::MissingBytes(_) => None,
             ViewNpyError::ExtraBytes(_) => None,
             ViewNpyError::NonNativeEndian => None,
+            ViewNpyError::UnalignedBytes => None,
         }
     }
 }
@@ -858,6 +867,9 @@ impl fmt::Display for ViewNpyError {
             ViewNpyError::NonNativeEndian => {
                 write!(f, "cannot cast array data in non-native endianness")
             },
+            ViewNpyError::UnalignedBytes => {
+                write!(f, "cannot cast unaligned array data")
+            },
         }
     }
 }
@@ -885,6 +897,7 @@ impl From<CastDataError> for ViewNpyError {
             CastDataError::MissingBytes(nbytes) => ViewNpyError::MissingBytes(nbytes),
             CastDataError::ExtraBytes(nbytes) => ViewNpyError::ExtraBytes(nbytes),
             CastDataError::NonNativeEndian => ViewNpyError::NonNativeEndian,
+            CastDataError::UnalignedBytes => ViewNpyError::UnalignedBytes,
             CastDataError::ParseData(err) => ViewNpyError::ParseData(err),
         }
     }
@@ -967,6 +980,8 @@ pub enum CastDataError {
     ExtraBytes(usize),
     /// Cannot cast array data in non-native endianness.
     NonNativeEndian,
+    /// Cannot cast unaligned array data.
+    UnalignedBytes,
     /// An error parsing the data.
     ParseData(Box<dyn Error + Send + Sync + 'static>),
 }
@@ -979,6 +994,7 @@ impl Error for CastDataError {
             CastDataError::MissingBytes(_) => None,
             CastDataError::ExtraBytes(_) => None,
             CastDataError::NonNativeEndian => None,
+            CastDataError::UnalignedBytes => None,
             CastDataError::ParseData(err) => Some(&**err),
         }
     }
@@ -1001,6 +1017,9 @@ impl fmt::Display for CastDataError {
             }
             CastDataError::NonNativeEndian => {
                 write!(f, "cannot cast array data in non-native endianness")
+            },
+            CastDataError::UnalignedBytes => {
+                write!(f, "cannot cast unaligned array data")
             },
             CastDataError::ParseData(err) => write!(f, "error parsing data: {}", err),
         }
@@ -1046,6 +1065,16 @@ pub fn check_bytes_len<T>(bytes_len: usize, len: usize) -> Result<(), CastDataEr
     }
 }
 
+/// Returns `Ok(_)` iff the slice containing bytes is aligned to the ABI-required minimum
+/// alignment of the element type `T` the slice is supposed to be cast to.
+pub fn check_bytes_align<T>(bytes: &[u8]) -> Result<(), CastDataError> {
+    if bytes.as_ptr().align_offset(mem::align_of::<T>()) == 0 {
+        Ok(())
+    } else {
+        Err(CastDataError::UnalignedBytes)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::{ReadDataError, ReadableElement, CastDataError, CastableElement};
@@ -1055,8 +1084,23 @@ mod test {
     use std::slice;
 
     #[test]
+    fn view_i8() {
+        let elems = &[24, -78, 74];
+        let data = unsafe { slice::from_raw_parts(
+            elems.as_ptr().cast(),
+            elems.len() * mem::size_of::<i8>(),
+        ) };
+        #[cfg(target_endian = "little")]
+        let type_desc = PyValue::String(String::from("|i1"));
+        #[cfg(target_endian = "big")]
+        let type_desc = PyValue::String(String::from("|i1"));
+        let out = <i8>::bytes_as_slice(data, &type_desc, elems.len()).unwrap();
+        assert_eq!(out, elems);
+    }
+
+    #[test]
     fn view_i32() {
-        let elems = &[34234324, -980780878i32, 2849874];
+        let elems = &[34234324, -980780878, 2849874];
         let data = unsafe { slice::from_raw_parts(
             elems.as_ptr().cast(),
             elems.len() * mem::size_of::<i32>(),
@@ -1071,7 +1115,7 @@ mod test {
 
     #[test]
     fn view_i32_mut() {
-        let elems = &mut [34234324, -980780878i32, 2849874];
+        let elems = &mut [34234324, -980780878, 2849874];
         let data = unsafe { slice::from_raw_parts_mut(
             elems.as_mut_ptr().cast(),
             elems.len() * mem::size_of::<i32>(),
@@ -1088,7 +1132,7 @@ mod test {
 
     #[test]
     fn view_i32_non_native_endian() {
-        let elems = &[34234324, -980780878i32, 2849874];
+        let elems = &[34234324, -980780878, 2849874];
         let data = unsafe { slice::from_raw_parts(
            elems.as_ptr().cast(),
            elems.len() * mem::size_of::<i32>(),
