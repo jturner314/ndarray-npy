@@ -320,27 +320,24 @@ impl<'a> NpzView<'a> {
             let name = file.name().to_string();
             names.insert(name, index);
             // Get data slice.
-            let data_start: usize = file.data_start().try_into()
-                .map_err(|_| ViewNpyError::LengthOverflow)?;
-            let size: usize = file.size().try_into()
-                .map_err(|_| ViewNpyError::LengthOverflow)?;
-            let data_end = data_start.checked_add(size)
-                .ok_or(ViewNpyError::LengthOverflow)?;
-            let data = bytes.get(data_start..data_end)
-                .ok_or(ViewNpyError::LengthOverflow)?;
+            let data = file.data_start().try_into().ok()
+                .and_then(|data_start: usize| file.size().try_into().ok()
+                    .and_then(|size: usize| data_start.checked_add(size))
+                    .and_then(|data_end| bytes.get(data_start..data_end)));
             // Get central CRC-32 slice.
-            let central_header_start: usize = file.central_header_start().try_into()
-                .map_err(|_| ViewNpyError::LengthOverflow)?;
-            let central_crc32_start = central_header_start.checked_add(16)
-                .ok_or(ViewNpyError::LengthOverflow)?;
-            let central_crc32_end = central_crc32_start.checked_add(4)
-                .ok_or(ViewNpyError::LengthOverflow)?;
-            let central_crc32 = bytes.get(central_crc32_start..central_crc32_end)
-                .ok_or(ViewNpyError::LengthOverflow)?;
-            // Store file view by file index.
-            files.insert(index, NpyView { data, central_crc32 });
-            // Increment index of uncompressed files.
-            index += 1;
+            let central_crc32 = file.central_header_start().try_into().ok()
+                .and_then(|central_header_start: usize| central_header_start.checked_add(16))
+                .and_then(|central_crc32_start| central_crc32_start.checked_add(4)
+                    .and_then(|central_crc32_end|
+                        bytes.get(central_crc32_start..central_crc32_end)));
+            if let (Some(data), Some(central_crc32)) = (data, central_crc32) {
+                // Store file view by file index.
+                files.insert(index, NpyView { data, central_crc32 });
+                // Increment index of uncompressed files.
+                index += 1;
+            } else {
+                Err(ZipError::InvalidArchive("Length overflow"))?;
+            }
         }
         Ok(Self { files, names })
     }
@@ -448,71 +445,67 @@ impl<'a> NpzViewMut<'a> {
             let name = file.name().to_string();
             names.insert(name, index);
             // Get local CRC-32 range.
-            let header_start: usize = file.header_start().try_into()
-                .map_err(|_| ViewNpyError::LengthOverflow)?;
-            let crc32_start = header_start.checked_add(14)
-                .ok_or(ViewNpyError::LengthOverflow)?;
-            let crc32_end = crc32_start.checked_add(4)
-                .ok_or(ViewNpyError::LengthOverflow)?;
-            let crc32 = crc32_start..crc32_end;
+            let crc32 = file.header_start().try_into().ok()
+                .and_then(|header_start: usize| header_start.checked_add(14))
+                .and_then(|crc32_start| crc32_start.checked_add(4)
+                    .map(|crc32_end| crc32_start..crc32_end));
             // Get data range.
-            let data_start: usize = file.data_start().try_into()
-                .map_err(|_| ViewNpyError::LengthOverflow)?;
-            let size: usize = file.size().try_into()
-                .map_err(|_| ViewNpyError::LengthOverflow)?;
-            let data_end = data_start.checked_add(size)
-                .ok_or(ViewNpyError::LengthOverflow)?;
-            let data = data_start..data_end;
+            let data = file.data_start().try_into().ok()
+                .and_then(|data_start: usize| file.size().try_into().ok()
+                    .and_then(|size: usize| data_start.checked_add(size))
+                    .map(|data_end| data_start..data_end));
             // Get central CRC-32 range.
-            let central_header_start: usize = file.central_header_start().try_into()
-                .map_err(|_| ViewNpyError::LengthOverflow)?;
-            let central_crc32_start = central_header_start.checked_add(16)
-                .ok_or(ViewNpyError::LengthOverflow)?;
-            let central_crc32_end = central_crc32_start.checked_add(4)
-                .ok_or(ViewNpyError::LengthOverflow)?;
-            let central_crc32 = central_crc32_start..central_crc32_end;
-            // Sort ranges by their starts. Ensure range starts are unique to catch
-            // panic on malformed zip archives.
-            if splits.insert(crc32.start, crc32.end).is_some() {
-                Err(ZipError::InvalidArchive("Ambiguous CRC-32 range"))?;
+            let central_crc32 = file.central_header_start().try_into().ok()
+                .and_then(|central_header_start: usize| central_header_start.checked_add(16))
+                .and_then(|central_crc32_start| central_crc32_start.checked_add(4)
+                    .map(|central_crc32_end| central_crc32_start..central_crc32_end));
+            if let (Some(crc32), Some(data), Some(central_crc32)) = (crc32, data, central_crc32) {
+                // Sort ranges by their starts.
+                splits.insert(crc32.start, crc32.end);
+                splits.insert(data.start, data.end);
+                splits.insert(central_crc32.start, central_crc32.end);
+                // Store ranges by file index.
+                ranges.insert(index, (crc32, data, central_crc32));
+                // Increment index of uncompressed files.
+                index += 1;
+            } else {
+                Err(ZipError::InvalidArchive("Length overflow"))?;
             }
-            if splits.insert(data.start, data.end).is_some() {
-                Err(ZipError::InvalidArchive("Ambiguous data range"))?;
-            }
-            if splits.insert(central_crc32.start, central_crc32.end).is_some() {
-                Err(ZipError::InvalidArchive("Ambiguous central CRC-32 range"))?;
-            }
-            // Store ranges by file index.
-            ranges.insert(index, (crc32, data, central_crc32));
-            // Increment index of uncompressed files.
-            index += 1;
-        }
-        // Ensure ranges do not overlap to catch panic on malformed zip archive.
-        let mut last_end = 0;
-        for (&start, &end) in &splits {
-            if start < last_end {
-                Err(ZipError::InvalidArchive("Overlapping ranges"))?;
-            }
-            last_end = end;
         }
         // Split and store borrows by their range starts.
         let mut offset = 0;
         let mut slices = HashMap::new();
         for (&start, &end) in &splits {
-            let (slice, remaining_bytes) = bytes.split_at_mut(start - offset);
+            // Split off leading bytes.
+            let mid = start - offset;
+            if mid > bytes.len() {
+                Err(ZipError::InvalidArchive("Offset exceeds EOF"))?;
+            }
+            let (slice, remaining_bytes) = bytes.split_at_mut(mid);
             offset += slice.len();
-            let (slice, remaining_bytes) = remaining_bytes.split_at_mut(end - offset);
+            // Split off leading borrow of interest.
+            let mid = end - offset;
+            if mid > remaining_bytes.len() {
+                Err(ZipError::InvalidArchive("Length exceeds EOF"))?;
+            }
+            let (slice, remaining_bytes) = remaining_bytes.split_at_mut(mid);
             offset += slice.len();
+            // Store borrow by its range start.
             slices.insert(start, slice);
+            // Store remaining bytes.
             bytes = remaining_bytes;
         }
         // Collect split borrows as file views.
         let mut files = HashMap::new();
         for (&index, (crc32, data, central_crc32)) in &ranges {
-            let crc32 = slices.remove(&crc32.start).unwrap();
-            let data = slices.remove(&data.start).unwrap();
-            let central_crc32 = slices.remove(&central_crc32.start).unwrap();
-            files.insert(index, NpyViewMut { crc32, data, central_crc32 });
+            let crc32 = slices.remove(&crc32.start);
+            let data = slices.remove(&data.start);
+            let central_crc32 = slices.remove(&central_crc32.start);
+            if let (Some(crc32), Some(data), Some(central_crc32)) = (crc32, data, central_crc32) {
+                files.insert(index, NpyViewMut { crc32, data, central_crc32 });
+            } else {
+                Err(ZipError::InvalidArchive("Ambiguous offsets"))?;
+            }
         }
         Ok(Self { files, names })
     }
