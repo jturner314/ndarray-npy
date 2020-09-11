@@ -309,8 +309,9 @@ impl<'a> NpzView<'a> {
         let mut zip = ZipArchive::new(Cursor::new(bytes))?;
         let mut files = HashMap::new();
         let mut names = HashMap::new();
-        for index in 0..zip.len() {
-            let file = zip.by_index(index)?;
+        let mut index = 0;
+        for zip_index in 0..zip.len() {
+            let file = zip.by_index(zip_index)?;
             // Skip compressed files.
             if file.compression() != CompressionMethod::Stored {
                 continue;
@@ -338,6 +339,8 @@ impl<'a> NpzView<'a> {
                 .ok_or(ViewNpyError::LengthOverflow)?;
             // Store file view by file index.
             files.insert(index, NpyView { data, central_crc32 });
+            // Increment index of uncompressed files.
+            index += 1;
         }
         Ok(Self { files, names })
     }
@@ -434,8 +437,9 @@ impl<'a> NpzViewMut<'a> {
         let mut names = HashMap::new();
         let mut ranges = HashMap::new();
         let mut splits = BTreeMap::new();
-        for index in 0..zip.len() {
-            let file = zip.by_index(index)?;
+        let mut index = 0;
+        for zip_index in 0..zip.len() {
+            let file = zip.by_index(zip_index)?;
             // Skip compressed files.
             if file.compression() != CompressionMethod::Stored {
                 continue;
@@ -480,6 +484,8 @@ impl<'a> NpzViewMut<'a> {
             }
             // Store ranges by file index.
             ranges.insert(index, (crc32, data, central_crc32));
+            // Increment index of uncompressed files.
+            index += 1;
         }
         // Ensure ranges do not overlap to catch panic on malformed zip archive.
         let mut last_end = 0;
