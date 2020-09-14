@@ -542,8 +542,7 @@ impl<'a> NpzViewMut<'a> {
 
 /// Read-write view of memory-mapped `.npy` files within an `.npz` file.
 ///
-/// **Note:** Does **not** automatically `verify()` CRC-32 checksum.
-/// **Note:** Does automatically `update()` CRC-32 checksum on `drop()`.
+/// **Note:** Does **not** automatically `verify()` CRC-32 but **does** `update()` it on `drop()`.
 #[derive(Debug)]
 pub struct NpyViewMut<'a> {
     crc32: &'a mut [u8],
