@@ -279,19 +279,34 @@ impl From<ViewNpyError> for ViewNpzError {
 ///
 /// # Example
 ///
-/// ```no_run
-/// use ndarray::Ix1;
-/// use ndarray_npy::{NpzView, ViewNpzError};
+/// ```
 /// use std::fs::OpenOptions;
+/// use memmap::MmapOptions;
+/// use ndarray_npy::{NpzView, ViewNpzError};
+/// use ndarray::Ix1;
 ///
-/// let mmap = &[]; // Memory-mapped `.npz` file.
-/// let npz = NpzView::new(mmap)?;
+/// // Open `.npz` archive of uncompressed `.npy` files in native endian.
+/// #[cfg(target_endian = "little")]
+/// let file = OpenOptions::new().read(true)
+///     .open("tests/examples_little_endian_64_byte_aligned.npz").unwrap();
+/// #[cfg(target_endian = "big")]
+/// let file = OpenOptions::new().read(true)
+///     .open("tests/examples_big_endian_64_byte_aligned.npz").unwrap();
+/// // Memory-map `.npz` archive of 16-byte or ideally 64-byte aligned `.npy` files.
+/// let mmap = unsafe { MmapOptions::new().map(&file).unwrap() };
+/// let npz = NpzView::new(&mmap)?;
+/// // List uncompressed files only.
 /// for npy in npz.names() {
 ///     println!("{}", npy);
 /// }
-/// let x_npy_view = npz.by_name("x.npy")?;
-/// let y_npy_view = npz.by_name("y.npy")?;
-/// let x_array_view = x_npy_view.view::<f64, Ix1>()?;
+/// // Get read-only `.npy` views.
+/// let x_npy_view = npz.by_name("i64.npy")?;
+/// let y_npy_view = npz.by_name("f64.npy")?;
+/// // Optionally verify CRC-32 checksums.
+/// x_npy_view.verify()?;
+/// y_npy_view.verify()?;
+/// // Get and print read-only `ArrayView`s.
+/// let x_array_view = x_npy_view.view::<i64, Ix1>()?;
 /// let y_array_view = y_npy_view.view::<f64, Ix1>()?;
 /// println!("{}", x_array_view);
 /// println!("{}", y_array_view);
@@ -362,7 +377,7 @@ impl<'a> NpzView<'a> {
         self.by_index(self.names.get(name).copied().ok_or(ZipError::FileNotFound)?)
     }
 
-    /// Returns a read-only `.npy` file view by index.
+    /// Returns a read-only `.npy` file view by index in `0..len()`.
     pub fn by_index(&self, index: usize) -> Result<NpyView<'a>, ViewNpzError> {
         self.files.get(&index).copied().ok_or(ZipError::FileNotFound.into())
     }
@@ -400,25 +415,40 @@ impl<'a> NpyView<'a> {
 ///
 /// # Example
 ///
-/// ```no_run
-/// use ndarray::Ix1;
-/// use ndarray_npy::{NpzViewMut, ViewNpzError};
+/// ```
 /// use std::fs::OpenOptions;
+/// use memmap::MmapOptions;
+/// use ndarray_npy::{NpzViewMut, ViewNpzError};
+/// use ndarray::Ix1;
 ///
-/// let mmap = &mut []; // Memory-mapped `.npz` file.
-/// let mut npz = NpzViewMut::new(mmap)?;
+/// // Open `.npz` archive of uncompressed `.npy` files in native endian.
+/// #[cfg(target_endian = "little")]
+/// let mut file = OpenOptions::new().read(true).write(true)
+///     .open("tests/examples_little_endian_64_byte_aligned.npz").unwrap();
+/// #[cfg(target_endian = "big")]
+/// let mut file = OpenOptions::new().read(true).write(true)
+///     .open("tests/examples_big_endian_64_byte_aligned.npz").unwrap();
+/// // Memory-map `.npz` archive of 16-byte or ideally 64-byte aligned `.npy` files.
+/// let mut mmap = unsafe { MmapOptions::new().map_mut(&file).unwrap() };
+/// let mut npz = NpzViewMut::new(&mut mmap)?;
+/// // List uncompressed files only.
 /// for npy in npz.names() {
 ///     println!("{}", npy);
 /// }
-/// let mut x_npy_view_mut = npz.by_name("x.npy")?;
-/// let mut y_npy_view_mut = npz.by_name("y.npy")?;
-/// let x_array_view_mut = x_npy_view_mut.view_mut::<f64, Ix1>()?;
+/// // Get read-write `.npy` views of both arrays at the same time.
+/// let mut x_npy_view_mut = npz.by_name("i64.npy")?;
+/// let mut y_npy_view_mut = npz.by_name("f64.npy")?;
+/// // Optionally verify CRC-32 checksums.
+/// x_npy_view_mut.verify()?;
+/// y_npy_view_mut.verify()?;
+/// // Get and print read-write `ArrayViewMut`s.
+/// let x_array_view_mut = x_npy_view_mut.view_mut::<i64, Ix1>()?;
 /// let y_array_view_mut = y_npy_view_mut.view_mut::<f64, Ix1>()?;
-/// // Split borrows: Mutable access to both arrays at the same time.
 /// println!("{}", x_array_view_mut);
 /// println!("{}", y_array_view_mut);
-/// // x_npy_view_mut.update(); // Automatically updated on `drop()`.
-/// // y_npy_view_mut.update(); // Automatically updated on `drop()`.
+/// // Update CRC-32 checksums after changes. Automatically updated on `drop()`.
+/// x_npy_view_mut.update();
+/// y_npy_view_mut.update();
 /// # Ok::<(), ViewNpzError>(())
 /// ```
 #[derive(Debug)]
@@ -530,7 +560,7 @@ impl<'a> NpzViewMut<'a> {
         self.by_index(self.names.get(name).copied().ok_or(ZipError::FileNotFound)?)
     }
 
-    /// Moves a read-write `.npy` file view by index out of the `.npz` file view.
+    /// Moves a read-write `.npy` file view by index in `0..len()` out of the `.npz` file view.
     pub fn by_index(&mut self, index: usize) -> Result<NpyViewMut<'a>, ViewNpzError> {
         if index > self.names.len() {
             Err(ZipError::FileNotFound.into())
