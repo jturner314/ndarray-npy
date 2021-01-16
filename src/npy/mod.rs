@@ -312,8 +312,8 @@ pub enum ReadNpyError {
     ParseHeader(ParseHeaderError),
     /// An error parsing the data.
     ParseData(Box<dyn Error + Send + Sync + 'static>),
-    /// Overflow while computing the length of the array from the shape
-    /// described in the file header.
+    /// Overflow while computing the length of the array (in units of bytes or
+    /// the number of elements) from the shape described in the file header.
     LengthOverflow,
     /// An error caused by incorrect `Dimension` type.
     WrongNdim(Option<usize>, usize),
@@ -432,10 +432,7 @@ where
         let header = Header::from_reader(&mut reader)?;
         let shape = header.shape.into_dimension();
         let ndim = shape.ndim();
-        let len = match shape.size_checked() {
-            Some(len) if len <= std::isize::MAX as usize => len,
-            _ => return Err(ReadNpyError::LengthOverflow),
-        };
+        let len = shape_length_checked::<A>(&shape).ok_or(ReadNpyError::LengthOverflow)?;
         let data = A::read_to_end_exact_vec(&mut reader, &header.type_descriptor, len)?;
         ArrayBase::from_shape_vec(shape.set_f(header.fortran_order), data)
             .unwrap()
@@ -655,6 +652,23 @@ impl ReadableElement for bool {
 // `false` is `0x00`, and the bitwise representation of `true` is `0x01`, so we
 // can just cast the data in-place.
 impl_writable_primitive!(bool, "|b1", "|b1");
+
+/// Computes the length associated with the shape (i.e. the product of the axis
+/// lengths), where the element type is `T`.
+///
+/// Returns `None` if the number of elements or the length in bytes would
+/// overflow `isize`.
+fn shape_length_checked<T>(shape: &IxDyn) -> Option<usize> {
+    let len = shape.size_checked()?;
+    if len > std::isize::MAX as usize {
+        return None;
+    }
+    let bytes = len.checked_mul(mem::size_of::<T>())?;
+    if bytes > std::isize::MAX as usize {
+        return None;
+    }
+    Some(len)
+}
 
 #[cfg(test)]
 mod test {
