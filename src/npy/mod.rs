@@ -7,9 +7,11 @@ use self::header::{
 use ndarray::prelude::*;
 use ndarray::{Data, DataOwned, IntoDimension};
 use py_literal::Value as PyValue;
+use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
-use std::io;
+use std::fs::File;
+use std::io::{self, Seek, SeekFrom};
 use std::mem;
 
 /// Read an `.npy` file located at the specified path.
@@ -61,6 +63,127 @@ where
     T: WriteNpyExt,
 {
     array.write_npy(std::fs::File::create(path)?)
+}
+
+/// Writes an `.npy` file (sparse if possible) with bitwise-zero-filled data.
+///
+/// The `.npy` file represents an array with element type `A` and shape
+/// specified by `shape`, with all elements of the array represented by an
+/// all-zero byte-pattern. The file is written starting at the current cursor
+/// location and truncated such that there are no additional bytes after the
+/// `.npy` data.
+///
+/// This function is primarily useful for creating an `.npy` file for an array
+/// larger than available memory. The file can then be memory-mapped and
+/// modified using [`ViewMutNpyExt`].
+///
+/// # Panics
+///
+/// May panic if any of the following overflow `isize` or `u64`:
+///
+/// - the number of elements in the array
+/// - the size of the array in bytes
+/// - the size of the resulting file in bytes
+///
+/// # Considerations
+///
+/// ## Data is zeroed bytes
+///
+/// The data consists of all zeroed bytes, so this function is useful only for
+/// element types for which an all-zero byte-pattern is a valid representation.
+///
+/// ## Sparse file
+///
+/// On filesystems which support [sparse files], most of the data should be
+/// handled by empty blocks, i.e. not allocated on disk. If you plan to
+/// memory-map the file to modify it and know that most blocks of the file will
+/// ultimately contain some nonzero data, then it may be beneficial to allocate
+/// space for the file on disk before modifying it in order to avoid
+/// fragmentation. For example, on POSIX-like systems, you can do this by
+/// calling `fallocate` on the file.
+///
+/// [sparse files]: https://en.wikipedia.org/wiki/Sparse_file
+///
+/// ## Alternatives
+///
+/// If all you want to do is create an array larger than the available memory
+/// and don't care about actually writing the data to disk, it may be worth
+/// considering alternative options:
+///
+/// - Add more swap space to your system, using swap file(s) if necessary, so
+///   that you can allocate the array as normal.
+///
+/// - If you know the data will be sparse:
+///
+///   - Use a sparse data structure instead of `ndarray`'s array types. For
+///     example, the [`sprs`](https://crates.io/crates/sprs) crate provides
+///     sparse matrices.
+///
+///   - Rely on memory overcommitment. In other words, configure the operating
+///     system to allocate more memory than actually exists. However, this
+///     risks the system running out of memory if the data is not as sparse as
+///     you expect.
+///
+/// # Example
+///
+/// In this example, a file containing 64 GiB of zeroed `f64` elements is
+/// created. Then, an `ArrayViewMut` is created by memory-mapping the file.
+/// Modifications to the data in the `ArrayViewMut` will be applied to the
+/// backing file. This works even on systems with less than 64 GiB of physical
+/// memory. On filesystems which support [sparse files], the disk space that's
+/// actually used depends on how much data is modified.
+///
+/// ```no_run
+/// use memmap2::MmapMut;
+/// use ndarray::ArrayViewMut3;
+/// use ndarray_npy::{write_zeroed_npy, ViewMutNpyExt};
+/// use std::fs::{File, OpenOptions};
+///
+/// let path = "array.npy";
+///
+/// // Create a (sparse if supported) file containing 64 GiB of zeroed data.
+/// let file = File::create(path)?;
+/// write_zeroed_npy::<f64, _>(&file, (1024, 2048, 4096))?;
+///
+/// // Memory-map the file and create the mutable view.
+/// let file = OpenOptions::new().read(true).write(true).open(path)?;
+/// let mut mmap = unsafe { MmapMut::map_mut(&file)? };
+/// let mut view_mut = ArrayViewMut3::<f64>::view_mut_npy(&mut mmap)?;
+///
+/// // Modify an element in the view.
+/// view_mut[[500, 1000, 2000]] = 3.14;
+/// #
+/// # Ok::<_, Box<dyn std::error::Error>>(())
+/// ```
+pub fn write_zeroed_npy<A, D>(mut file: &File, shape: D) -> Result<(), WriteNpyError>
+where
+    A: WritableElement,
+    D: IntoDimension,
+{
+    let dim = shape.into_dimension();
+    let data_bytes_len: u64 = dim
+        .size_checked()
+        .expect("overflow computing number of elements")
+        .checked_mul(mem::size_of::<A>())
+        .expect("overflow computing length of data")
+        .try_into()
+        .expect("overflow converting length of data to u64");
+    Header {
+        type_descriptor: A::type_descriptor(),
+        fortran_order: false,
+        shape: dim.as_array_view().to_vec(),
+    }
+    .write(file)?;
+    let current_offset = file.seek(SeekFrom::Current(0))?;
+    // First, truncate the file to the current offset.
+    file.set_len(current_offset)?;
+    // Then, zero-extend the length to represent the data (sparse if possible).
+    file.set_len(
+        current_offset
+            .checked_add(data_bytes_len)
+            .expect("overflow computing file length"),
+    )?;
+    Ok(())
 }
 
 /// An error writing array data.

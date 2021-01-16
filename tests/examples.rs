@@ -1,7 +1,11 @@
 use memmap2::{Mmap, MmapMut};
 use ndarray::prelude::*;
-use ndarray_npy::{ReadNpyError, ReadNpyExt, ViewMutNpyExt, ViewNpyError, ViewNpyExt, WriteNpyExt};
+use ndarray_npy::{
+    write_zeroed_npy, ReadNpyError, ReadNpyExt, ViewMutNpyExt, ViewNpyError, ViewNpyExt,
+    WriteNpyExt,
+};
 use std::fs::{self, File};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::mem;
 
 #[test]
@@ -253,4 +257,28 @@ fn misaligned() {
         ArrayViewMut3::<f64>::view_mut_npy(&mut misaligned[..]),
         Err(ViewNpyError::MisalignedData),
     ));
+}
+
+#[test]
+fn zeroed() {
+    const EXISTING_DATA: &[u8] = b"hello";
+    const SHAPE: [usize; 3] = [3, 4, 5];
+
+    // Create a file with some existing data.
+    let mut file: File = tempfile::tempfile().unwrap();
+    file.write_all(EXISTING_DATA).unwrap();
+
+    // Write `.npy` file with zeroed data.
+    write_zeroed_npy::<i32, _>(&file, SHAPE).unwrap();
+
+    // Reset cursor and verify EXISTING_DATA is still there.
+    file.seek(SeekFrom::Start(0)).unwrap();
+    let mut buf = [0; EXISTING_DATA.len()];
+    file.read_exact(&mut buf).unwrap();
+    assert_eq!(EXISTING_DATA, buf);
+
+    // Read and verify the `.npy` file.
+    let arr = Array3::<i32>::read_npy(file).unwrap();
+    assert_eq!(arr, Array3::<i32>::zeros(SHAPE));
+    assert!(arr.is_standard_layout());
 }

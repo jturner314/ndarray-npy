@@ -17,10 +17,15 @@
 //! - Writing
 //!   - [`WriteNpyExt`] extension trait
 //!   - [`write_npy`] convenience function
+//!   - [`write_zeroed_npy`] to write an `.npy` file (sparse if possible) of zeroed data
 //! - Readonly viewing (primarily for use with memory-mapped files)
 //!   - [`ViewNpyExt`] extension trait
 //! - Mutable viewing (primarily for use with memory-mapped files)
 //!   - [`ViewMutNpyExt`] extension trait
+//!
+//! It's possible to create `.npy` files larger than the available memory with
+//! [`write_zeroed_npy`] and then modify them by memory-mapping and using
+//! [`ViewMutNpyExt`].
 //!
 //! # .npz Files
 //!
@@ -47,9 +52,9 @@ mod npy;
 mod npz;
 
 pub use crate::npy::{
-    read_npy, write_npy, ReadDataError, ReadNpyError, ReadNpyExt, ReadableElement, ViewDataError,
-    ViewElement, ViewMutElement, ViewMutNpyExt, ViewNpyError, ViewNpyExt, WritableElement,
-    WriteDataError, WriteNpyError, WriteNpyExt,
+    read_npy, write_npy, write_zeroed_npy, ReadDataError, ReadNpyError, ReadNpyExt,
+    ReadableElement, ViewDataError, ViewElement, ViewMutElement, ViewMutNpyExt, ViewNpyError,
+    ViewNpyExt, WritableElement, WriteDataError, WriteNpyError, WriteNpyExt,
 };
 #[cfg(feature = "npz")]
 pub use crate::npz::{NpzReader, NpzWriter, ReadNpzError, WriteNpzError};
