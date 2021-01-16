@@ -1,5 +1,5 @@
 use ndarray::prelude::*;
-use ndarray_npy::{ReadNpyExt, WriteNpyExt};
+use ndarray_npy::{ReadNpyError, ReadNpyExt, WriteNpyExt};
 use std::fs::{self, File};
 
 #[test]
@@ -84,5 +84,8 @@ fn read_bool() {
 #[test]
 fn read_bool_bad_value() {
     let file = File::open("resources/example_bool_bad_value.npy").unwrap();
-    assert!(Array3::<bool>::read_npy(file).is_err());
+    assert!(matches!(
+        Array3::<bool>::read_npy(file),
+        Err(ReadNpyError::ParseData(_)),
+    ));
 }
