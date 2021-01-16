@@ -19,6 +19,11 @@ def write_example_array(shape, dtype, order, f, dst):
 
 
 def main():
+    write_example_array(
+        (2, 3), dtype='<i4', order='C', f=lambda i: i,
+        dst='array.npy',
+    )
+
     SHAPE = (2, 3, 4)
 
     write_example_array(

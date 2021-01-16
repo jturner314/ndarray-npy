@@ -1,30 +1,32 @@
 use ndarray::prelude::*;
 use ndarray_npy::{ReadNpyExt, WriteNpyExt};
-use std::io::Cursor;
+use std::fs::{self, File};
 
 #[test]
 fn write_f64_standard() {
     #[cfg(target_endian = "little")]
-    let correct = include_bytes!("example_f64_little_endian_standard.npy");
+    let path = "resources/example_f64_little_endian_standard.npy";
     #[cfg(target_endian = "big")]
-    let correct = include_bytes!("example_f64_big_endian_standard.npy");
+    let path = "resources/example_f64_big_endian_standard.npy";
 
+    let correct = fs::read(path).unwrap();
     let mut writer = Vec::<u8>::new();
     let mut arr = Array3::<f64>::zeros((2, 3, 4));
     for (i, elem) in arr.iter_mut().enumerate() {
         *elem = i as f64;
     }
     arr.write_npy(&mut writer).unwrap();
-    assert_eq!(&correct[..], &writer[..]);
+    assert_eq!(&correct, &writer);
 }
 
 #[test]
 fn write_f64_fortran() {
     #[cfg(target_endian = "little")]
-    let correct = include_bytes!("example_f64_little_endian_fortran.npy");
+    let path = "resources/example_f64_little_endian_fortran.npy";
     #[cfg(target_endian = "big")]
-    let correct = include_bytes!("example_f64_big_endian_fortran.npy");
+    let path = "resources/example_f64_big_endian_fortran.npy";
 
+    let correct = fs::read(path).unwrap();
     let mut writer = Vec::<u8>::new();
     let mut arr = Array3::<f64>::zeros((2, 3, 4).f());
     for (i, elem) in arr.iter_mut().enumerate() {
@@ -40,12 +42,12 @@ fn read_f64_standard() {
     for (i, elem) in correct.iter_mut().enumerate() {
         *elem = i as f64;
     }
-    for &bytes in &[
-        &include_bytes!("example_f64_little_endian_standard.npy")[..],
-        &include_bytes!("example_f64_big_endian_standard.npy")[..],
+    for path in &[
+        "resources/example_f64_little_endian_standard.npy",
+        "resources/example_f64_big_endian_standard.npy",
     ] {
-        let reader = Cursor::new(bytes);
-        let arr = Array3::<f64>::read_npy(reader).unwrap();
+        let file = File::open(path).unwrap();
+        let arr = Array3::<f64>::read_npy(file).unwrap();
         assert_eq!(correct, arr);
         assert!(arr.is_standard_layout());
     }
@@ -57,12 +59,12 @@ fn read_f64_fortran() {
     for (i, elem) in correct.iter_mut().enumerate() {
         *elem = i as f64;
     }
-    for &bytes in &[
-        &include_bytes!("example_f64_little_endian_fortran.npy")[..],
-        &include_bytes!("example_f64_big_endian_fortran.npy")[..],
+    for path in &[
+        "resources/example_f64_little_endian_fortran.npy",
+        "resources/example_f64_big_endian_fortran.npy",
     ] {
-        let reader = Cursor::new(bytes);
-        let arr = Array3::<f64>::read_npy(reader).unwrap();
+        let file = File::open(path).unwrap();
+        let arr = Array3::<f64>::read_npy(file).unwrap();
         assert_eq!(correct, arr);
         assert!(arr.t().is_standard_layout());
     }
@@ -74,13 +76,13 @@ fn read_bool() {
     for (i, elem) in correct.iter_mut().enumerate() {
         *elem = (i % 5) % 2 == 0;
     }
-    let reader = Cursor::new(&include_bytes!("example_bool_standard.npy")[..]);
-    let arr = Array3::<bool>::read_npy(reader).unwrap();
+    let file = File::open("resources/example_bool_standard.npy").unwrap();
+    let arr = Array3::<bool>::read_npy(file).unwrap();
     assert_eq!(correct, arr);
 }
 
 #[test]
 fn read_bool_bad_value() {
-    let reader = Cursor::new(&include_bytes!("example_bool_bad_value.npy")[..]);
-    assert!(Array3::<bool>::read_npy(reader).is_err());
+    let file = File::open("resources/example_bool_bad_value.npy").unwrap();
+    assert!(Array3::<bool>::read_npy(file).is_err());
 }

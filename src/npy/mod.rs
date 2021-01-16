@@ -19,12 +19,12 @@ use std::mem;
 ///
 /// # Example
 ///
-/// ```no_run
+/// ```
 /// use ndarray::Array2;
 /// use ndarray_npy::read_npy;
 /// # use ndarray_npy::ReadNpyError;
 ///
-/// let arr: Array2<i32> = read_npy("array.npy")?;
+/// let arr: Array2<i32> = read_npy("resources/array.npy")?;
 /// # println!("arr = {}", arr);
 /// # Ok::<_, ReadNpyError>(())
 /// ```
@@ -401,13 +401,13 @@ impl From<ReadDataError> for ReadNpyError {
 ///
 /// # Example
 ///
-/// ```no_run
+/// ```
 /// use ndarray::Array2;
 /// use ndarray_npy::ReadNpyExt;
 /// use std::fs::File;
 /// # use ndarray_npy::ReadNpyError;
 ///
-/// let reader = File::open("array.npy")?;
+/// let reader = File::open("resources/array.npy")?;
 /// let arr = Array2::<i32>::read_npy(reader)?;
 /// # println!("arr = {}", arr);
 /// # Ok::<_, ReadNpyError>(())
