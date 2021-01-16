@@ -14,6 +14,7 @@ const MAGIC_STRING: &[u8] = b"\x93NUMPY";
 /// The total header length (including magic string, version number, header
 /// length value, array format description, padding, and final newline) must be
 /// evenly divisible by this value.
+// If this changes, update the docs of `ViewNpyExt` and `ViewMutNpyExt`.
 const HEADER_DIVISOR: usize = 64;
 
 #[derive(Debug)]
