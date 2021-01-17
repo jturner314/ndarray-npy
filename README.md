@@ -23,7 +23,8 @@ breaking release of this library will probably change those traits.
 
 Future plans include support for:
 
-* Memory-mapped files.
+* Memory-mapped `.npz` files. (Memory-mapped `.npy` files are already
+  supported.)
 * More element types (e.g. structs). If you need support for structs before
   this is implemented in `ndarray-npy`, check out the [`npy` crate].
 * Possibly merging this with the [`npy` crate].

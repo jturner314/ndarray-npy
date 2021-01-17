@@ -14,6 +14,7 @@ const MAGIC_STRING: &[u8] = b"\x93NUMPY";
 /// The total header length (including magic string, version number, header
 /// length value, array format description, padding, and final newline) must be
 /// evenly divisible by this value.
+// If this changes, update the docs of `ViewNpyExt` and `ViewMutNpyExt`.
 const HEADER_DIVISOR: usize = 64;
 
 #[derive(Debug)]
@@ -179,7 +180,7 @@ impl Version {
     }
 
     /// Read header length.
-    fn read_header_len<R: io::Read>(self, mut reader: R) -> Result<usize, ReadHeaderError> {
+    fn read_header_len<R: io::Read>(self, reader: &mut R) -> Result<usize, ReadHeaderError> {
         match self {
             Version::V1_0 => Ok(usize::from(reader.read_u16::<LittleEndian>()?)),
             Version::V2_0 | Version::V3_0 => {
@@ -384,7 +385,7 @@ impl Header {
         }
     }
 
-    pub fn from_reader<R: io::Read>(mut reader: R) -> Result<Self, ReadHeaderError> {
+    pub fn from_reader<R: io::Read>(reader: &mut R) -> Result<Self, ReadHeaderError> {
         // Check for magic string.
         let mut buf = vec![0; MAGIC_STRING.len()];
         reader.read_exact(&mut buf)?;
@@ -398,7 +399,7 @@ impl Header {
         let version = Version::from_bytes(&buf)?;
 
         // Get `HEADER_LEN`.
-        let header_len = version.read_header_len(&mut reader)?;
+        let header_len = version.read_header_len(reader)?;
 
         // Parse the dictionary describing the array's format.
         let mut buf = vec![0; header_len];

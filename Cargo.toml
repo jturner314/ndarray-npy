@@ -21,3 +21,7 @@ zip = { version = "0.5", default-features = false, optional = true }
 default = ["compressed_npz"]
 npz = ["zip"]
 compressed_npz = ["npz", "zip/deflate"]
+
+[dev-dependencies]
+memmap2 = "0.2"
+tempfile = "3.2"
