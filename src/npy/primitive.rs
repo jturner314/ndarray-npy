@@ -468,7 +468,7 @@ mod test {
         let data = &[0x00, 0x01, 0x00, 0x00, 0x01];
         let type_desc = PyValue::String(String::from("|b1"));
         let out = <bool>::bytes_as_slice(data, &type_desc, data.len()).unwrap();
-        assert_eq!(out, vec![false, true, false, false, true]);
+        assert_eq!(out, &[false, true, false, false, true]);
     }
 
     #[test]

@@ -92,7 +92,7 @@ fn read_bool_bad_value() {
     let file = File::open("resources/example_bool_bad_value.npy").unwrap();
     assert!(matches!(
         Array3::<bool>::read_npy(file),
-        Err(ReadNpyError::ParseData(_)),
+        Err(ReadNpyError::ParseData(_))
     ));
 }
 
@@ -151,7 +151,7 @@ fn view_bool_bad_value() {
     let mmap = unsafe { Mmap::map(&file).unwrap() };
     assert!(matches!(
         ArrayView3::<bool>::view_npy(&mmap),
-        Err(ViewNpyError::InvalidData(_)),
+        Err(ViewNpyError::InvalidData(_))
     ));
 }
 
@@ -226,7 +226,7 @@ fn view_mut_bool_bad_value() {
     let mut mmap = unsafe { MmapMut::map_mut(&file).unwrap() };
     assert!(matches!(
         ArrayViewMut3::<bool>::view_mut_npy(&mut mmap),
-        Err(ViewNpyError::InvalidData(_)),
+        Err(ViewNpyError::InvalidData(_))
     ));
 }
 
@@ -251,11 +251,11 @@ fn misaligned() {
 
     assert!(matches!(
         ArrayView3::<f64>::view_npy(&misaligned[..]),
-        Err(ViewNpyError::MisalignedData),
+        Err(ViewNpyError::MisalignedData)
     ));
     assert!(matches!(
         ArrayViewMut3::<f64>::view_mut_npy(&mut misaligned[..]),
-        Err(ViewNpyError::MisalignedData),
+        Err(ViewNpyError::MisalignedData)
     ));
 }
 
