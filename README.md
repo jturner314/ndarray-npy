@@ -18,8 +18,8 @@ from/to [`.npy`] and [`.npz`] files. See the
 **This crate is a work-in-progress.** It currently supports only a subset of
 `.npy` header descriptors and supports only primitive fixed-size integer,
 floating point, and `bool` types as the array element type. You can implement
-`ReadableElement` and `WritableElement` for your own types, but the next
-breaking release of this library will probably change those traits.
+the `*Element` traits for your own types, but the next breaking release of this
+library will probably change those traits.
 
 Future plans include support for:
 
@@ -37,7 +37,7 @@ To use with the default features:
 
 ```toml
 [dependencies]
-ndarray-npy = "0.7"
+ndarray-npy = "0.7.1"
 ```
 
 The `default` feature set includes the `compressed_npz` feature, which enables
@@ -48,7 +48,7 @@ To use without the default features:
 
 ```toml
 [dependencies]
-ndarray-npy = { version = "0.7", default-features = false }
+ndarray-npy = { version = "0.7.1", default-features = false }
 ```
 
 With `default-features = false`, `ndarray-npy` provides support only for `.npy`
@@ -65,7 +65,7 @@ For example, you can use just the `npz` feature:
 
 ```toml
 [dependencies.ndarray-npy]
-version = "0.7"
+version = "0.7.1"
 default-features = false
 features = ["npz"]
 ```
@@ -78,7 +78,7 @@ Library authors should specify their dependency on `ndarray-npy` like this:
 
 ```toml
 [dependencies.ndarray-npy]
-version = "0.7"
+version = "0.7.1"
 default-features = false
 features = [FEATURES_LIST_HERE]
 ```
@@ -90,6 +90,20 @@ where the `features` list is one of the following:
 * `["compressed_npz"]` if your crate depends on `.npz` file support with compression
 
 ## Releases
+
+* **0.7.1**
+
+  * Added support for viewing byte slices as `.npy` files, primarily for use
+    with memory-mapped files. See the `ViewNpyExt` and `ViewMutNpyExt`
+    extension traits. By @n3vu0r and @jturner314.
+  * Added support for creating files larger than available memory with
+    `write_zeroed_npy`.
+  * Improved handling of overflow in the number of bytes to read as specified
+    by the shape and element type in the `.npy` file header. Before, if the
+    number of bytes of data was more than `isize::MAX`, the implementation
+    would attempt to create the array anyway and panic. Now, it detects this
+    case before attempting to create the array and returns
+    `Err(ReadNpyError::LengthOverflow)` instead.
 
 * **0.7.0**
 
