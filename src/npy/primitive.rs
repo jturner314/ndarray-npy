@@ -30,15 +30,14 @@ fn check_for_extra_bytes<R: io::Read>(reader: &mut R) -> Result<(), ReadDataErro
 ///
 /// **Panics** if `len * size_of::<T>()` overflows.
 fn check_bytes_len<T>(bytes_len: usize, len: usize) -> Result<(), ViewDataError> {
+    use std::cmp::Ordering;
     let needed_bytes = len
         .checked_mul(mem::size_of::<T>())
         .expect("Required number of bytes should not overflow.");
-    if bytes_len < needed_bytes {
-        Err(ViewDataError::MissingBytes(needed_bytes - bytes_len))
-    } else if bytes_len > needed_bytes {
-        Err(ViewDataError::ExtraBytes(bytes_len - needed_bytes))
-    } else {
-        Ok(())
+    match bytes_len.cmp(&needed_bytes) {
+        Ordering::Less => Err(ViewDataError::MissingBytes(needed_bytes - bytes_len)),
+        Ordering::Equal => Ok(()),
+        Ordering::Greater => Err(ViewDataError::ExtraBytes(bytes_len - needed_bytes)),
     }
 }
 
@@ -103,6 +102,7 @@ macro_rules! impl_writable_primitive {
                 fn cast(self_: &$elem) -> &[u8] {
                     unsafe {
                         let ptr: *const $elem = self_;
+                        #[allow(clippy::unknown_clippy_lints, clippy::size_of_in_element_count)]
                         slice::from_raw_parts(ptr.cast::<u8>(), mem::size_of::<$elem>())
                     }
                 }
@@ -117,6 +117,7 @@ macro_rules! impl_writable_primitive {
                 // Function to ensure lifetime of bytes slice is correct.
                 fn cast(slice: &[$elem]) -> &[u8] {
                     unsafe {
+                        #[allow(clippy::unknown_clippy_lints, clippy::size_of_in_element_count)]
                         slice::from_raw_parts(
                             slice.as_ptr().cast::<u8>(),
                             slice.len() * mem::size_of::<$elem>(),
