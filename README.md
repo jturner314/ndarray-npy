@@ -1,6 +1,6 @@
 # ndarray-npy
 
-[![Build status](https://travis-ci.org/jturner314/ndarray-npy.svg?branch=master)](https://travis-ci.org/jturner314/ndarray-npy)
+[![Build status](https://travis-ci.com/jturner314/ndarray-npy.svg?branch=master)](https://travis-ci.com/jturner314/ndarray-npy)
 [![Coverage](https://codecov.io/gh/jturner314/ndarray-npy/branch/master/graph/badge.svg)](https://codecov.io/gh/jturner314/ndarray-npy)
 [![Dependencies status](https://deps.rs/repo/github/jturner314/ndarray-npy/status.svg)](https://deps.rs/repo/github/jturner314/ndarray-npy)
 [![Crate](https://img.shields.io/crates/v/ndarray-npy.svg)](https://crates.io/crates/ndarray-npy)
