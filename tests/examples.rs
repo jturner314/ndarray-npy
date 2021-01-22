@@ -1,5 +1,6 @@
 use memmap2::{Mmap, MmapMut};
 use ndarray::prelude::*;
+use ndarray::Slice;
 use ndarray_npy::{
     write_zeroed_npy, ReadNpyError, ReadNpyExt, ViewMutNpyExt, ViewNpyError, ViewNpyExt,
     WriteNpyExt,
@@ -40,6 +41,25 @@ fn write_f64_fortran() {
     }
     arr.write_npy(&mut writer).unwrap();
     assert_eq!(&correct[..], &writer[..]);
+}
+
+#[test]
+fn write_f64_discontiguous() {
+    #[cfg(target_endian = "little")]
+    let path = "resources/example_f64_little_endian_standard.npy";
+    #[cfg(target_endian = "big")]
+    let path = "resources/example_f64_big_endian_standard.npy";
+
+    let correct = fs::read(path).unwrap();
+    let mut writer = Vec::<u8>::new();
+    let mut arr = Array3::<f64>::zeros((3, 4, 4));
+    arr.slice_axis_inplace(Axis(1), Slice::new(0, None, 2));
+    arr.swap_axes(0, 1);
+    for (i, elem) in arr.iter_mut().enumerate() {
+        *elem = i as f64;
+    }
+    arr.write_npy(&mut writer).unwrap();
+    assert_eq!(&correct, &writer);
 }
 
 #[test]

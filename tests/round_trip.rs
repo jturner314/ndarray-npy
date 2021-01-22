@@ -57,9 +57,9 @@ fn test_round_trip_single_layout<A, D, F>(
     assert_eq!(&modified, &read_modified);
 }
 
-/// Calls `test_round_trip_single_layout` with both a standard-layout and a
-/// Fortran-layout view.
-fn test_round_trip_both_layouts<A, D, F>(
+/// Calls `test_round_trip_single_layout` with standard layout, Fortran layout,
+/// and (if ndim > 2) a permuted layout.
+fn test_round_trip_multiple_layouts<A, D, F>(
     original: ArrayView<'_, A, D>,
     modified: ArrayView<'_, A, D>,
     mut modify: F,
@@ -80,11 +80,31 @@ fn test_round_trip_both_layouts<A, D, F>(
     )
     .unwrap();
     test_round_trip_single_layout(fortran.view(), modified.view(), &mut modify);
+
+    // Test with permuted axes layout.
+    if original.ndim() > 2 {
+        // Data with axes 1 and 2 swapped.
+        let permuted_data: Vec<_> = {
+            let mut perm = original.view();
+            perm.swap_axes(1, 2);
+            perm.iter().cloned().collect()
+        };
+        // Shape with axes 1 and 2 swapped.
+        let permuted_shape: D = {
+            let mut shape = original.raw_dim();
+            shape[1] = original.len_of(Axis(2));
+            shape[2] = original.len_of(Axis(1));
+            shape
+        };
+        let mut permuted = Array::from_shape_vec(permuted_shape, permuted_data).unwrap();
+        permuted.swap_axes(1, 2);
+        test_round_trip_single_layout(permuted.view(), modified.view(), &mut modify);
+    }
 }
 
 #[test]
 fn round_trip_i32() {
-    test_round_trip_both_layouts(
+    test_round_trip_multiple_layouts(
         array![[[1i32, 8], [-3, 4], [2, 9]], [[-5, 0], [7, 38], [-4, 1]]].view(),
         array![[[1i32, 8], [-3, 12], [2, 9]], [[-5, 0], [7, 38], [42, 1]]].view(),
         |mut v| {
@@ -96,7 +116,7 @@ fn round_trip_i32() {
 
 #[test]
 fn round_trip_f32() {
-    test_round_trip_both_layouts(
+    test_round_trip_multiple_layouts(
         array![
             [[3f32, -1.4], [-159., 26.], [5., -3.5]],
             [[-89.7, 93.], [2., 384.], [-626.4, 3.]],
@@ -116,7 +136,7 @@ fn round_trip_f32() {
 
 #[test]
 fn round_trip_f64() {
-    test_round_trip_both_layouts(
+    test_round_trip_multiple_layouts(
         array![
             [2.7f64, -40.4, -23., 27.8, -49., -43.3],
             [-25.2, 11.8, -8.9, -17.8, 36.4, -25.6],
@@ -136,7 +156,7 @@ fn round_trip_f64() {
 
 #[test]
 fn round_trip_bool() {
-    test_round_trip_both_layouts(
+    test_round_trip_multiple_layouts(
         array![[[true], [true], [false]], [[false], [true], [false]]].view(),
         array![[[true], [false], [false]], [[false], [true], [true]]].view(),
         |mut v| {
