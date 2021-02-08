@@ -3,9 +3,9 @@
 [![Build status](https://travis-ci.com/jturner314/ndarray-npy.svg?branch=master)](https://travis-ci.com/jturner314/ndarray-npy)
 [![Coverage](https://codecov.io/gh/jturner314/ndarray-npy/branch/master/graph/badge.svg)](https://codecov.io/gh/jturner314/ndarray-npy)
 [![Dependencies status](https://deps.rs/repo/github/jturner314/ndarray-npy/status.svg)](https://deps.rs/repo/github/jturner314/ndarray-npy)
-[![Crate](https://img.shields.io/crates/v/ndarray-npy.svg)](https://crates.io/crates/ndarray-npy)
+[![ndarray-npy at crates.io](https://img.shields.io/crates/v/ndarray-npy.svg)](https://crates.io/crates/ndarray-npy)
 [![Documentation](https://docs.rs/ndarray-npy/badge.svg)](https://docs.rs/ndarray-npy)
-[![Chat](https://img.shields.io/badge/chat-%23rust--sci%20on%20OFTC-lightgrey.svg)](https://webchat.oftc.net/?channels=rust-sci)
+[![IRC at #rust-sci on OFTC](https://img.shields.io/badge/chat-%23rust--sci%20on%20OFTC-lightgrey.svg)](https://webchat.oftc.net/?channels=rust-sci)
 
 This crate provides support for reading/writing [`ndarray`]'s `ArrayBase` type
 from/to [`.npy`] and [`.npz`] files. See the
