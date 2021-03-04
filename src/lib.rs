@@ -52,7 +52,7 @@ mod npy;
 mod npz;
 
 pub use crate::npy::{
-    read_npy, write_npy, write_zeroed_npy, ReadDataError, ReadNpyError, ReadNpyExt,
+    read_npy, write_npy, write_zeroed_npy, read_npz, write_npz, ReadDataError, ReadNpyError, ReadNpyExt,
     ReadableElement, ViewDataError, ViewElement, ViewMutElement, ViewMutNpyExt, ViewNpyError,
     ViewNpyExt, WritableElement, WriteDataError, WriteNpyError, WriteNpyExt,
 };
