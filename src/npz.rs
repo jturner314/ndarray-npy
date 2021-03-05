@@ -63,6 +63,7 @@ impl From<WriteNpyError> for WriteNpzError {
 /// let b: Array1<i32> = array![7, 8, 9];
 /// npz.add_array("a", &a)?;
 /// npz.add_array("b", &b)?;
+/// npz.finish()?;
 /// # Ok::<_, Box<dyn std::error::Error>>(())
 /// ```
 pub struct NpzWriter<W: Write + Seek> {
@@ -107,6 +108,21 @@ impl<W: Write + Seek> NpzWriter<W> {
         self.zip.start_file(name, self.options)?;
         array.write_npy(&mut self.zip)?;
         Ok(())
+    }
+
+    /// Calls [`.finish()`](ZipWriter::finish) on the zip file and
+    /// [`.flush()`](Write::flush) on the writer, and then returns the writer.
+    ///
+    /// This finishes writing the remaining zip structures and flushes the
+    /// writer. While dropping will automatically attempt to finish the zip
+    /// file and (for writers that flush on drop, such as
+    /// [`BufWriter`](std::io::BufWriter)) flush the writer, any errors that
+    /// occur during drop will be silently ignored. So, it's necessary to call
+    /// `.finish()` to properly handle errors.
+    pub fn finish(mut self) -> Result<W, WriteNpzError> {
+        let mut writer = self.zip.finish()?;
+        writer.flush().map_err(ZipError::from)?;
+        Ok(writer)
     }
 }
 
