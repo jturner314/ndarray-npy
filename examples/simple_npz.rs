@@ -8,6 +8,7 @@ fn write_example() -> Result<(), Box<dyn std::error::Error>> {
     let b: Array1<i32> = array![7, 8, 9];
     npz.add_array("a", &a)?;
     npz.add_array("b", &b)?;
+    npz.finish()?;
     Ok(())
 }
 
