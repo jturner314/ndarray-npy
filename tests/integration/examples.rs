@@ -1,3 +1,5 @@
+//! Miscellaneous example cases.
+
 use memmap2::{Mmap, MmapMut};
 use ndarray::prelude::*;
 use ndarray::Slice;

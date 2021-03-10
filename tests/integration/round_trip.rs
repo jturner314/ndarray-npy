@@ -1,3 +1,5 @@
+//! Tests that read/viewed data match the original written data.
+
 use ndarray::array;
 use ndarray::prelude::*;
 use ndarray_npy::{
