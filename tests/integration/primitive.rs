@@ -1,5 +1,6 @@
 //! Tests for `*Element` trait implementations for primitives.
 
+use crate::MaybeAlignedBytes;
 use ndarray_npy::{
     ReadDataError, ReadableElement, ViewDataError, ViewElement, ViewMutElement, WritableElement,
 };
@@ -13,11 +14,12 @@ fn view_i32() {
     let elems: &[i32] = &[34234324, -980780878, 2849874];
     let mut buf: Vec<u8> = Vec::new();
     <i32>::write_slice(elems, &mut buf).unwrap();
+    let aligned = MaybeAlignedBytes::aligned_from_bytes(buf, mem::align_of::<i32>());
     #[cfg(target_endian = "little")]
     let type_desc = PyValue::String(String::from("<i4"));
     #[cfg(target_endian = "big")]
     let type_desc = PyValue::String(String::from(">i4"));
-    let out: &[i32] = <i32>::bytes_as_slice(&buf, &type_desc, elems.len()).unwrap();
+    let out: &[i32] = <i32>::bytes_as_slice(&aligned, &type_desc, elems.len()).unwrap();
     assert_eq!(out, elems);
 }
 
@@ -26,26 +28,28 @@ fn view_i32_mut() {
     let elems: &[i32] = &[34234324, -980780878, 2849874];
     let mut buf: Vec<u8> = Vec::new();
     <i32>::write_slice(elems, &mut buf).unwrap();
+    let mut aligned = MaybeAlignedBytes::aligned_from_bytes(buf, mem::align_of::<i32>());
     #[cfg(target_endian = "little")]
     let type_desc = PyValue::String(String::from("<i4"));
     #[cfg(target_endian = "big")]
     let type_desc = PyValue::String(String::from(">i4"));
-    let out: &mut [i32] = <i32>::bytes_as_mut_slice(&mut buf, &type_desc, elems.len()).unwrap();
+    let out: &mut [i32] = <i32>::bytes_as_mut_slice(&mut aligned, &type_desc, elems.len()).unwrap();
     assert_eq!(out, elems);
     out[2] += 1;
-    let buf_last = i32::from_ne_bytes(buf[2 * mem::size_of::<i32>()..].try_into().unwrap());
+    let buf_last = i32::from_ne_bytes(aligned[2 * mem::size_of::<i32>()..].try_into().unwrap());
     assert_eq!(buf_last, elems[2] + 1);
 }
 
 #[test]
 fn view_i32_non_native_endian() {
     const LEN: usize = 3;
-    let buf: &[u8] = &[0; LEN * mem::size_of::<i32>()];
+    let aligned =
+        MaybeAlignedBytes::aligned_zeros(LEN * mem::size_of::<i32>(), mem::align_of::<i32>());
     #[cfg(target_endian = "little")]
     let type_desc = PyValue::String(String::from(">i4"));
     #[cfg(target_endian = "big")]
     let type_desc = PyValue::String(String::from("<i4"));
-    let out = <i32>::bytes_as_slice(buf, &type_desc, LEN);
+    let out = <i32>::bytes_as_slice(&aligned, &type_desc, LEN);
     assert!(matches!(out, Err(ViewDataError::NonNativeEndian)));
 }
 
