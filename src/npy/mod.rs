@@ -11,7 +11,7 @@ use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
-use std::io::{self, Seek, SeekFrom};
+use std::io::{self, BufWriter, Seek, SeekFrom};
 use std::mem;
 
 /// Read an `.npy` file located at the specified path.
@@ -43,8 +43,8 @@ where
 /// This function will create the file if it does not exist, or overwrite it if
 /// it does.
 ///
-/// This is a convenience function for using `File::create` followed by
-/// [`WriteNpyExt::write_npy`](trait.WriteNpyExt.html#tymethod.write_npy).
+/// This is a convenience function for `BufWriter::new(File::create(path)?)`
+/// followed by [`WriteNpyExt::write_npy`].
 ///
 /// # Example
 ///
@@ -62,7 +62,7 @@ where
     P: AsRef<std::path::Path>,
     T: WriteNpyExt,
 {
-    array.write_npy(std::fs::File::create(path)?)
+    array.write_npy(BufWriter::new(File::create(path)?))
 }
 
 /// Writes an `.npy` file (sparse if possible) with bitwise-zero-filled data.
