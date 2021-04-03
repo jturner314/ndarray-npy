@@ -2,9 +2,9 @@ name: Continuous integration
 
 on:
   push:
-    branches: [ $default-branch ]
+    branches: [ master ]
   pull_request:
-    branches: [ $default-branch ]
+    branches: [ master ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -53,9 +53,9 @@ jobs:
       - name: Install cross
         run: cargo install cross -f
       - name: Build
-        run: cargo build --verbose --target=${{ matrix.target }}
+        run: cross build --verbose --target=${{ matrix.target }}
       - name: Run tests
-        run: cargo test --verbose --target=${{ matrix.target }}
+        run: cross test --verbose --target=${{ matrix.target }}
 
   clippy:
     runs-on: ubuntu-latest
