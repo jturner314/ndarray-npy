@@ -292,7 +292,13 @@ impl From<WriteDataError> for WriteNpyError {
     }
 }
 
-/// Extension trait for writing `ArrayBase` to `.npy` files.
+/// Extension trait for writing [`ArrayBase`] to `.npy` files.
+///
+/// If writes are expensive (e.g. for a file or network socket) and the layout
+/// of the array is not known to be in standard or Fortran layout, it is
+/// strongly recommended to wrap the writer in a [`BufWriter`]. For the sake of
+/// convenience, this method calls [`.flush()`](io::Write::flush) on the writer
+/// before returning.
 ///
 /// # Example
 ///
@@ -300,10 +306,11 @@ impl From<WriteDataError> for WriteNpyError {
 /// use ndarray::{array, Array2};
 /// use ndarray_npy::WriteNpyExt;
 /// use std::fs::File;
+/// use std::io::BufWriter;
 /// # use ndarray_npy::WriteNpyError;
 ///
 /// let arr: Array2<i32> = array![[1, 2, 3], [4, 5, 6]];
-/// let writer = File::create("array.npy")?;
+/// let writer = BufWriter::new(File::create("array.npy")?);
 /// arr.write_npy(writer)?;
 /// # Ok::<_, WriteNpyError>(())
 /// ```
