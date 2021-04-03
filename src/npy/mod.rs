@@ -331,6 +331,7 @@ where
             }
             .write(&mut writer)?;
             A::write_slice(self.as_slice_memory_order().unwrap(), &mut writer)?;
+            writer.flush()?;
             Ok(())
         };
         if self.is_standard_layout() {
@@ -347,6 +348,7 @@ where
             for elem in self.iter() {
                 elem.write(&mut writer)?;
             }
+            writer.flush()?;
             Ok(())
         }
     }
