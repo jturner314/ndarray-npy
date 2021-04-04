@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  MIRIFLAGS: "-Zmiri-disable-isolation"
   RUSTFLAGS: "-D warnings"
 
 jobs:
@@ -56,6 +57,23 @@ jobs:
         run: cross build --verbose --target=${{ matrix.target }}
       - name: Run tests
         run: cross test --verbose --target=${{ matrix.target }}
+
+  miri:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - nightly
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          override: true
+          components: miri
+      - name: Run tests with Miri
+        run: cargo miri test --verbose
 
   clippy:
     runs-on: ubuntu-latest
