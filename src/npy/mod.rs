@@ -65,6 +65,78 @@ where
     array.write_npy(std::fs::File::create(path)?)
 }
 
+/// Writes an array to an `.npz` file at the specified path.
+///
+/// This function will create the file if it does not exist, or overwrite it if
+/// it does.
+///
+/// This is a convenience function for using `File::create` followed by
+/// wrapping the file handle with [`ndarray_npy::NpzWriter`] and using its
+/// `new_compressed` and `add_array` methods to write to the created file.
+///
+/// The array will be labled with the name "arr_0.npy" following numpy's conventions
+/// for labeling unnamed arrays in `savez_compressed`.
+///
+/// # Example
+///
+/// ```no_run
+/// use ndarray::array;
+/// use ndarray_npy::write_npz;
+/// # use ndarray_npy::WriteNpzError;
+///
+/// let arr = array![[1, 2, 3], [4, 5, 6]];
+/// write_npz("array.npz", &arr)?;
+/// # Ok::<_, WriteNpzError>(())
+/// ```
+pub fn write_npz<P, S, D>(path: P, array: &ArrayBase<S, D>) -> Result<(), crate::WriteNpzError>
+where
+    P: AsRef<std::path::Path>,
+    S::Elem: WritableElement,
+    S: Data,
+    D: Dimension
+{
+    let file = std::fs::File::create(path)
+        .map_err(|e| crate::WriteNpzError::Npy(WriteNpyError::Io(e)))?;
+    let mut wtr = crate::NpzWriter::new_compressed(file);
+    wtr.add_array("arr_0.npy", array)?;
+    Ok(())
+}
+
+/// Read an array from a `.npz` file located at the specified path and name.
+///
+/// This is a convience function for opening a file and using `NpzReader` to
+/// extract one array from it.
+///
+/// The name of a single array written to an `.npz` file using `write_npz`
+/// will be "arr_0.npy", following numpy's conventions for labeling unnamed
+/// arrays in `savez_compressed`.
+///
+/// # Example
+///
+/// ```
+/// use ndarray::Array2;
+/// use ndarray_npy::read_npz;
+/// # use ndarray_npy::ReadNpzError;
+/// let arr: Array2<i32> = read_npz("resources/array.npz", "arr_0.npy")?;
+/// # println!("arr = {}", arr);
+/// # Ok::<_, ReadNpzError>(())
+/// ```
+pub fn read_npz<P, N, S, D>(path: P, name: N) -> Result<ArrayBase<S, D>, crate::ReadNpzError>
+where
+    P: AsRef<std::path::Path>,
+    N: Into<String>,
+    S::Elem: ReadableElement,
+    S: DataOwned,
+    D: Dimension, 
+{
+    let file = std::fs::File::open(path)
+        .map_err(|e| crate::ReadNpzError::Npy(ReadNpyError::Io(e)))?;
+    let mut rdr = crate::NpzReader::new(file)?;
+    let name: String = name.into();
+    let arr = rdr.by_name(&name)?;
+    Ok(arr)
+}
+
 /// Writes an `.npy` file (sparse if possible) with bitwise-zero-filled data.
 ///
 /// The `.npy` file represents an array with element type `A` and shape

@@ -302,3 +302,30 @@ fn zeroed() {
     assert_eq!(arr, Array3::<i32>::zeros(SHAPE));
     assert!(arr.is_standard_layout());
 }
+
+#[test]
+fn convenience_functions_round_trip_f64_standard() {
+    let mut arr = Array3::<f64>::zeros((2, 3, 4));
+    for (i, elem) in arr.iter_mut().enumerate() {
+        *elem = (i as f64).sin() * std::f64::consts::PI;
+    }
+
+    let tmp = tempfile::tempdir().unwrap();
+
+    // npy round trip
+    let npy_path = tmp.path().join("f64-example.npy");
+    ndarray_npy::write_npy(&npy_path, &arr).unwrap();
+    assert!(npy_path.exists());
+    let rt_arr: Array3<f64> = ndarray_npy::read_npy(&npy_path).unwrap();
+    assert_eq!(arr, rt_arr);
+
+    // npz round trip
+    let npz_path = tmp.path().join("f64-example.npz");
+    ndarray_npy::write_npz(&npz_path, &arr).unwrap();
+    assert!(npz_path.exists());
+    let rtz_arr: Array3<f64> = ndarray_npy::read_npz(&npz_path, "arr_0.npy").unwrap();
+    assert_eq!(arr, rtz_arr);
+    tmp.close().unwrap();
+}
+
+
