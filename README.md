@@ -38,7 +38,7 @@ To use with the default features:
 
 ```toml
 [dependencies]
-ndarray-npy = "0.7.2"
+ndarray-npy = "0.8"
 ```
 
 The `default` feature set includes the `compressed_npz` feature, which enables
@@ -49,7 +49,7 @@ To use without the default features:
 
 ```toml
 [dependencies]
-ndarray-npy = { version = "0.7.2", default-features = false }
+ndarray-npy = { version = "0.8", default-features = false }
 ```
 
 With `default-features = false`, `ndarray-npy` provides support only for `.npy`
@@ -66,7 +66,7 @@ For example, you can use just the `npz` feature:
 
 ```toml
 [dependencies.ndarray-npy]
-version = "0.7.2"
+version = "0.8"
 default-features = false
 features = ["npz"]
 ```
@@ -79,7 +79,7 @@ Library authors should specify their dependency on `ndarray-npy` like this:
 
 ```toml
 [dependencies.ndarray-npy]
-version = "0.7.2"
+version = "0.8"
 default-features = false
 features = [FEATURES_LIST_HERE]
 ```
@@ -91,6 +91,12 @@ where the `features` list is one of the following:
 * `["compressed_npz"]` if your crate depends on `.npz` file support with compression
 
 ## Releases
+
+* **0.8.0**
+
+  * Updated to `ndarray` 0.15.
+  * Updated to `py_literal` 0.4.
+  * Updated to Rust 1.49.
 
 * **0.7.2**
 
