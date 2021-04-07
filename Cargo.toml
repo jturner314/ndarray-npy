@@ -4,6 +4,7 @@ version = "0.7.2"
 authors = ["Jim Turner <ndarray-npy@turner.link>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/jturner314/ndarray-npy"
+documentation = "https://docs.rs/ndarray-npy"
 description = ".npy and .npz file format support for ndarray"
 keywords = ["npy", "npz", "ndarray", "numpy", "array"]
 categories = ["parser-implementations", "encoding", "science"]
