@@ -13,9 +13,9 @@ edition = "2018"
 
 [dependencies]
 byteorder = "1.3.2"
-ndarray = "0.14"
+ndarray = "0.15"
 num-traits = "0.2"
-py_literal = "0.2.1"
+py_literal = "0.4"
 zip = { version = "0.5", default-features = false, optional = true }
 
 [features]
