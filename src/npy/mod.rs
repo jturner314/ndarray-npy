@@ -11,7 +11,7 @@ use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
-use std::io::{self, Seek, SeekFrom};
+use std::io::{self, BufWriter, Seek, SeekFrom};
 use std::mem;
 
 /// Read an `.npy` file located at the specified path.
@@ -43,8 +43,8 @@ where
 /// This function will create the file if it does not exist, or overwrite it if
 /// it does.
 ///
-/// This is a convenience function for using `File::create` followed by
-/// [`WriteNpyExt::write_npy`](trait.WriteNpyExt.html#tymethod.write_npy).
+/// This is a convenience function for `BufWriter::new(File::create(path)?)`
+/// followed by [`WriteNpyExt::write_npy`].
 ///
 /// # Example
 ///
@@ -62,7 +62,7 @@ where
     P: AsRef<std::path::Path>,
     T: WriteNpyExt,
 {
-    array.write_npy(std::fs::File::create(path)?)
+    array.write_npy(BufWriter::new(File::create(path)?))
 }
 
 /// Writes an `.npy` file (sparse if possible) with bitwise-zero-filled data.
@@ -292,7 +292,13 @@ impl From<WriteDataError> for WriteNpyError {
     }
 }
 
-/// Extension trait for writing `ArrayBase` to `.npy` files.
+/// Extension trait for writing [`ArrayBase`] to `.npy` files.
+///
+/// If writes are expensive (e.g. for a file or network socket) and the layout
+/// of the array is not known to be in standard or Fortran layout, it is
+/// strongly recommended to wrap the writer in a [`BufWriter`]. For the sake of
+/// convenience, this method calls [`.flush()`](io::Write::flush) on the writer
+/// before returning.
 ///
 /// # Example
 ///
@@ -300,10 +306,11 @@ impl From<WriteDataError> for WriteNpyError {
 /// use ndarray::{array, Array2};
 /// use ndarray_npy::WriteNpyExt;
 /// use std::fs::File;
+/// use std::io::BufWriter;
 /// # use ndarray_npy::WriteNpyError;
 ///
 /// let arr: Array2<i32> = array![[1, 2, 3], [4, 5, 6]];
-/// let writer = File::create("array.npy")?;
+/// let writer = BufWriter::new(File::create("array.npy")?);
 /// arr.write_npy(writer)?;
 /// # Ok::<_, WriteNpyError>(())
 /// ```
@@ -331,6 +338,7 @@ where
             }
             .write(&mut writer)?;
             A::write_slice(self.as_slice_memory_order().unwrap(), &mut writer)?;
+            writer.flush()?;
             Ok(())
         };
         if self.is_standard_layout() {
@@ -347,6 +355,7 @@ where
             for elem in self.iter() {
                 elem.write(&mut writer)?;
             }
+            writer.flush()?;
             Ok(())
         }
     }

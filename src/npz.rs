@@ -5,7 +5,7 @@ use ndarray::prelude::*;
 use ndarray::{Data, DataOwned};
 use std::error::Error;
 use std::fmt;
-use std::io::{Read, Seek, Write};
+use std::io::{BufWriter, Read, Seek, Write};
 use zip::result::ZipError;
 use zip::write::FileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -50,6 +50,15 @@ impl From<WriteNpyError> for WriteNpzError {
 }
 
 /// Writer for `.npz` files.
+///
+/// Note that the inner [`ZipWriter`] is wrapped in a [`BufWriter`] when
+/// writing each array with [`.add_array()`](NpzWriter::add_array). If desired,
+/// you could additionally buffer the innermost writer (e.g. the
+/// [`File`](std::fs::File) when writing to a file) by wrapping it in a
+/// [`BufWriter`]. This may be somewhat beneficial if the arrays are large and
+/// have non-standard layouts but may decrease performance if the arrays have
+/// standard or Fortran layout, so it's not recommended without testing to
+/// compare.
 ///
 /// # Example
 ///
@@ -106,7 +115,13 @@ impl<W: Write + Seek> NpzWriter<W> {
         D: Dimension,
     {
         self.zip.start_file(name, self.options)?;
-        array.write_npy(&mut self.zip)?;
+        // Buffering when writing individual arrays is beneficial even when the
+        // underlying writer is `Cursor<Vec<u8>>` instead of a real file. The
+        // only exception I saw in testing was the "compressed, in-memory
+        // writer, standard layout case". See
+        // https://github.com/jturner314/ndarray-npy/issues/50#issuecomment-812802481
+        // for details.
+        array.write_npy(BufWriter::new(&mut self.zip))?;
         Ok(())
     }
 
