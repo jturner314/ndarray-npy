@@ -38,7 +38,7 @@ To use with the default features:
 
 ```toml
 [dependencies]
-ndarray-npy = "0.7.1"
+ndarray-npy = "0.7.2"
 ```
 
 The `default` feature set includes the `compressed_npz` feature, which enables
@@ -49,7 +49,7 @@ To use without the default features:
 
 ```toml
 [dependencies]
-ndarray-npy = { version = "0.7.1", default-features = false }
+ndarray-npy = { version = "0.7.2", default-features = false }
 ```
 
 With `default-features = false`, `ndarray-npy` provides support only for `.npy`
@@ -66,7 +66,7 @@ For example, you can use just the `npz` feature:
 
 ```toml
 [dependencies.ndarray-npy]
-version = "0.7.1"
+version = "0.7.2"
 default-features = false
 features = ["npz"]
 ```
@@ -79,7 +79,7 @@ Library authors should specify their dependency on `ndarray-npy` like this:
 
 ```toml
 [dependencies.ndarray-npy]
-version = "0.7.1"
+version = "0.7.2"
 default-features = false
 features = [FEATURES_LIST_HERE]
 ```
@@ -92,7 +92,7 @@ where the `features` list is one of the following:
 
 ## Releases
 
-* **0.7.2** (not yet released)
+* **0.7.2**
 
   * Added a `.finish()` method to `NpzWriter`. All users of `NpzWriter` should
     call this method, after the write of the last array, in order to properly
