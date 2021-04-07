@@ -42,7 +42,7 @@
 # 0.6.0
 
 * Changed `write_npy` to take the array by reference instead of by value, by
-  [@flaghacker].
+  [@KarelPeeters].
 
 # 0.5.0
 
@@ -92,7 +92,7 @@
 * Initial release.
 
 [@bluss]: https://github.com/bluss/
-[@flaghacker]: https://github.com/flaghacker/
 [@jturner314]: https://github.com/jturner314/
+[@KarelPeeters]: https://github.com/KarelPeeters/
 [@n3vu0r]: https://github.com/n3vu0r/
 [@tobni]: https://github.com/tobni/
