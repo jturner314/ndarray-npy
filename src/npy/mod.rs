@@ -708,6 +708,7 @@ impl From<ViewDataError> for ViewNpyError {
 /// use the memory-mapping crate you're most comfortable with.
 ///
 /// ```
+/// # if !cfg!(miri) { // Miri doesn't support mmap.
 /// use memmap2::Mmap;
 /// use ndarray::ArrayView2;
 /// use ndarray_npy::ViewNpyExt;
@@ -717,6 +718,7 @@ impl From<ViewDataError> for ViewNpyError {
 /// let mmap = unsafe { Mmap::map(&file)? };
 /// let view = ArrayView2::<i32>::view_npy(&mmap)?;
 /// # println!("view = {}", view);
+/// # }
 /// # Ok::<_, Box<dyn std::error::Error>>(())
 /// ```
 pub trait ViewNpyExt<'a>: Sized {
@@ -756,6 +758,7 @@ pub trait ViewNpyExt<'a>: Sized {
 /// you can use the memory-mapping crate you're most comfortable with.
 ///
 /// ```
+/// # if !cfg!(miri) { // Miri doesn't support mmap.
 /// use memmap2::MmapMut;
 /// use ndarray::ArrayViewMut2;
 /// use ndarray_npy::ViewMutNpyExt;
@@ -768,6 +771,7 @@ pub trait ViewNpyExt<'a>: Sized {
 /// let mut mmap = unsafe { MmapMut::map_mut(&file)? };
 /// let view_mut = ArrayViewMut2::<i32>::view_mut_npy(&mut mmap)?;
 /// # println!("view_mut = {}", view_mut);
+/// # }
 /// # Ok::<_, Box<dyn std::error::Error>>(())
 /// ```
 pub trait ViewMutNpyExt<'a>: Sized {

@@ -1,7 +1,6 @@
 //! Miscellaneous example cases.
 
-use crate::MaybeAlignedBytes;
-use memmap2::{Mmap, MmapMut};
+use crate::{file_to_aligned_bytes, file_to_aligned_mut_bytes, MaybeAlignedBytes};
 use ndarray::prelude::*;
 use ndarray::Slice;
 use ndarray_npy::{
@@ -131,8 +130,8 @@ fn view_f64_standard() {
         *elem = i as f64;
     }
     let file = File::open(path).unwrap();
-    let mmap = unsafe { Mmap::map(&file).unwrap() };
-    let view = ArrayView3::<f64>::view_npy(&mmap).unwrap();
+    let bytes = unsafe { file_to_aligned_bytes(&file).unwrap() };
+    let view = ArrayView3::<f64>::view_npy(&bytes).unwrap();
     assert_eq!(correct, view);
     assert!(view.is_standard_layout());
 }
@@ -149,8 +148,8 @@ fn view_f64_fortran() {
         *elem = i as f64;
     }
     let file = File::open(path).unwrap();
-    let mmap = unsafe { Mmap::map(&file).unwrap() };
-    let view = ArrayView3::<f64>::view_npy(&mmap).unwrap();
+    let bytes = unsafe { file_to_aligned_bytes(&file).unwrap() };
+    let view = ArrayView3::<f64>::view_npy(&bytes).unwrap();
     assert_eq!(correct, view);
     assert!(view.t().is_standard_layout());
 }
@@ -162,8 +161,8 @@ fn view_bool() {
         *elem = (i % 5) % 2 == 0;
     }
     let file = File::open("resources/example_bool_standard.npy").unwrap();
-    let mmap = unsafe { Mmap::map(&file).unwrap() };
-    let view = ArrayView3::<bool>::view_npy(&mmap).unwrap();
+    let bytes = unsafe { file_to_aligned_bytes(&file).unwrap() };
+    let view = ArrayView3::<bool>::view_npy(&bytes).unwrap();
     assert_eq!(correct, view);
     assert!(view.is_standard_layout());
 }
@@ -171,9 +170,9 @@ fn view_bool() {
 #[test]
 fn view_bool_bad_value() {
     let file = File::open("resources/example_bool_bad_value.npy").unwrap();
-    let mmap = unsafe { Mmap::map(&file).unwrap() };
+    let bytes = unsafe { file_to_aligned_bytes(&file).unwrap() };
     assert!(matches!(
-        ArrayView3::<bool>::view_npy(&mmap),
+        ArrayView3::<bool>::view_npy(&bytes),
         Err(ViewNpyError::InvalidData(_))
     ));
 }
@@ -194,8 +193,8 @@ fn view_mut_f64_standard() {
         .write(true)
         .open(path)
         .unwrap();
-    let mut mmap = unsafe { MmapMut::map_mut(&file).unwrap() };
-    let view = ArrayViewMut3::<f64>::view_mut_npy(&mut mmap).unwrap();
+    let mut bytes = unsafe { file_to_aligned_mut_bytes(&file).unwrap() };
+    let view = ArrayViewMut3::<f64>::view_mut_npy(&mut bytes).unwrap();
     assert_eq!(correct, view);
     assert!(view.is_standard_layout());
 }
@@ -216,8 +215,8 @@ fn view_mut_f64_fortran() {
         .write(true)
         .open(path)
         .unwrap();
-    let mut mmap = unsafe { MmapMut::map_mut(&file).unwrap() };
-    let view = ArrayViewMut3::<f64>::view_mut_npy(&mut mmap).unwrap();
+    let mut bytes = unsafe { file_to_aligned_mut_bytes(&file).unwrap() };
+    let view = ArrayViewMut3::<f64>::view_mut_npy(&mut bytes).unwrap();
     assert_eq!(correct, view);
     assert!(view.t().is_standard_layout());
 }
@@ -233,8 +232,8 @@ fn view_mut_bool() {
         .write(true)
         .open("resources/example_bool_standard.npy")
         .unwrap();
-    let mut mmap = unsafe { MmapMut::map_mut(&file).unwrap() };
-    let view = ArrayViewMut3::<bool>::view_mut_npy(&mut mmap).unwrap();
+    let mut bytes = unsafe { file_to_aligned_mut_bytes(&file).unwrap() };
+    let view = ArrayViewMut3::<bool>::view_mut_npy(&mut bytes).unwrap();
     assert_eq!(correct, view);
     assert!(view.is_standard_layout());
 }
@@ -246,9 +245,9 @@ fn view_mut_bool_bad_value() {
         .write(true)
         .open("resources/example_bool_bad_value.npy")
         .unwrap();
-    let mut mmap = unsafe { MmapMut::map_mut(&file).unwrap() };
+    let mut bytes = unsafe { file_to_aligned_mut_bytes(&file).unwrap() };
     assert!(matches!(
-        ArrayViewMut3::<bool>::view_mut_npy(&mut mmap),
+        ArrayViewMut3::<bool>::view_mut_npy(&mut bytes),
         Err(ViewNpyError::InvalidData(_))
     ));
 }
@@ -273,6 +272,7 @@ fn misaligned() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore)] // issues with tempfile
 fn zeroed() {
     const EXISTING_DATA: &[u8] = b"hello";
     const SHAPE: [usize; 3] = [3, 4, 5];

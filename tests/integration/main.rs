@@ -1,5 +1,8 @@
 //! Integration tests.
 
+use memmap2::{Mmap, MmapMut};
+use std::fs::File;
+use std::io::{self, Read};
 use std::ops::{Deref, DerefMut};
 
 mod examples;
@@ -138,3 +141,39 @@ impl DerefMut for MaybeAlignedBytes {
         &mut self.buf[self.start..self.start + self.len]
     }
 }
+
+macro_rules! impl_file_to_aligned_bytes {
+    ($name:ident, $deref:ident, $mmap:path) => {
+        /// Returns a value which dereferences to a slice of the file's data
+        /// with at least 64-byte alignment.
+        ///
+        /// This is implemented using `mmap`, except under Miri, which doesn't
+        /// support `mmap`. Under Miri, it's implemented by copying the data
+        /// into RAM.
+        ///
+        /// # Safety
+        ///
+        /// The caller must ensure that the file is not modified until the return value
+        /// is dropped.
+        ///
+        /// # Panics
+        ///
+        /// May error due to reading or memory-mapping the file.
+        pub unsafe fn $name(mut file: &File) -> io::Result<Box<dyn $deref<Target = [u8]>>> {
+            const ALIGN: usize = 64;
+            if cfg!(miri) {
+                let mut bytes = Vec::new();
+                file.read_to_end(&mut bytes)?;
+                Ok(Box::new(MaybeAlignedBytes::aligned_from_bytes(
+                    bytes, ALIGN,
+                )))
+            } else {
+                let out = Box::new($mmap(&file)?);
+                assert_eq!(0, out.as_ptr() as usize % ALIGN);
+                Ok(out)
+            }
+        }
+    };
+}
+impl_file_to_aligned_bytes!(file_to_aligned_bytes, Deref, Mmap::map);
+impl_file_to_aligned_bytes!(file_to_aligned_mut_bytes, DerefMut, MmapMut::map_mut);
