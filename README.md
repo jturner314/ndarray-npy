@@ -92,6 +92,22 @@ where the `features` list is one of the following:
 
 ## Releases
 
+* **0.7.2** (not yet released)
+
+  * Added a `.finish()` method to `NpzWriter`. All users of `NpzWriter` should
+    call this method, after the write of the last array, in order to properly
+    handle errors. (Without calling `.finish()`, dropping will automatically
+    attempt to finish the file, but errors will be silently ignored.)
+  * Changed the `write_npy` convenience function and the `NpzWriter::add_array`
+    method to buffer writes using `BufWriter`. This significantly improves
+    write performance for arrays which are not in standard or Fortran layout.
+    The docs of `WriteNpyExt::write_npy` have also been updated to recommend
+    that users wrap the writer in a `BufWriter`. Thanks to @bluss for
+    mentioning the unbuffered writes issue.
+  * Changed `WriteNpyExt::write_npy` to always call `.flush()` before
+    returning. This is convenient when the writer passed to
+    `WriteNpyExt::write_npy` is wrapped in a `BufWriter`.
+
 * **0.7.1**
 
   * Added support for viewing byte slices as `.npy` files, primarily for use
