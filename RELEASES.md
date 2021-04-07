@@ -14,8 +14,8 @@
   method to buffer writes using `BufWriter`. This significantly improves write
   performance for arrays which are not in standard or Fortran layout. The docs
   of `WriteNpyExt::write_npy` have also been updated to recommend that users
-  wrap the writer in a `BufWriter`. Thanks to @bluss for mentioning the
-  unbuffered writes issue.
+  wrap the writer in a `BufWriter`. Thanks to [@bluss] for reporting the
+  unbuffered writes issue and reviewing the PR.
 * Changed `WriteNpyExt::write_npy` to always call `.flush()` before returning.
   This is convenient when the writer passed to `WriteNpyExt::write_npy` is
   wrapped in a `BufWriter`.
@@ -24,7 +24,7 @@
 
 * Added support for viewing byte slices as `.npy` files, primarily for use with
   memory-mapped files. See the `ViewNpyExt` and `ViewMutNpyExt` extension
-  traits. By @n3vu0r and @jturner314.
+  traits. By [@n3vu0r] and [@jturner314].
 * Added support for creating files larger than available memory with
   `write_zeroed_npy`.
 * Improved handling of overflow in the number of bytes to read as specified by
@@ -42,7 +42,7 @@
 # 0.6.0
 
 * Changed `write_npy` to take the array by reference instead of by value, by
-  @flaghacker.
+  [@flaghacker].
 
 # 0.5.0
 
@@ -63,8 +63,8 @@
 
 # 0.4.0
 
-* Added support for reading/writing arrays of `bool`, by @tobni and
-  @jturner314.
+* Added support for reading/writing arrays of `bool`, by [@tobni] and
+  [@jturner314].
 * Updated to `zip` 0.5.
 * Updated to Rust 1.32.
 * Renamed the `compressed_npz_default` feature to `compressed_npz` because the
@@ -90,3 +90,9 @@
 # 0.1.0
 
 * Initial release.
+
+[@bluss]: https://github.com/bluss/
+[@flaghacker]: https://github.com/flaghacker/
+[@jturner314]: https://github.com/jturner314/
+[@n3vu0r]: https://github.com/n3vu0r/
+[@tobni]: https://github.com/tobni/
