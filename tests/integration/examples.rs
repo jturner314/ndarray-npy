@@ -1,5 +1,6 @@
 //! Miscellaneous example cases.
 
+use crate::MaybeAlignedBytes;
 use memmap2::{Mmap, MmapMut};
 use ndarray::prelude::*;
 use ndarray::Slice;
@@ -254,23 +255,13 @@ fn view_mut_bool_bad_value() {
 
 #[test]
 fn misaligned() {
-    let mut written = Vec::<u8>::new();
+    let mut buf = Vec::<u8>::new();
     let mut arr = Array3::<f64>::zeros((2, 3, 4));
     for (i, elem) in arr.iter_mut().enumerate() {
         *elem = i as f64;
     }
-    arr.write_npy(&mut written).unwrap();
-
-    const ADJUSTMENT: usize = 1;
-    let mut maybe_misaligned = Vec::<u8>::with_capacity(written.len() + ADJUSTMENT);
-    if maybe_misaligned.as_ptr() as usize % mem::align_of::<f64>() == 0 {
-        maybe_misaligned.resize(ADJUSTMENT, 0);
-    }
-    let start = maybe_misaligned.len();
-    maybe_misaligned.extend_from_slice(&written);
-    let misaligned = &mut maybe_misaligned[start..start + written.len()];
-    debug_assert_ne!(0, misaligned.as_ptr() as usize % mem::align_of::<f64>());
-
+    arr.write_npy(&mut buf).unwrap();
+    let mut misaligned = MaybeAlignedBytes::misaligned_from_bytes(buf, mem::align_of::<f64>());
     assert!(matches!(
         ArrayView3::<f64>::view_npy(&misaligned[..]),
         Err(ViewNpyError::MisalignedData)

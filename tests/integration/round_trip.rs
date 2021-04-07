@@ -1,5 +1,6 @@
 //! Tests that read/viewed data match the original written data.
 
+use crate::MaybeAlignedBytes;
 use ndarray::array;
 use ndarray::prelude::*;
 use ndarray_npy::{
@@ -25,22 +26,13 @@ fn test_round_trip_single_layout<A, D, F>(
     D: Dimension,
     F: for<'a> FnOnce(ArrayViewMut<'a, A, D>),
 {
+    // Write the `.npy` file to a buffer.
+    let mut buf = Vec::<u8>::new();
+    original.write_npy(&mut buf).unwrap();
+
     // Get a slice of the bytes in the the written `.npy` file with an
     // alignment usable with `ViewNpyExt`/`ViewMutNpyExt`.
-    let mut maybe_misaligned;
-    let npy: &mut [u8] = {
-        // Write the `.npy` file to a buffer.
-        let mut written = Vec::<u8>::new();
-        original.write_npy(&mut written).unwrap();
-        // Copy the written data to a new, larger `Vec`, and insert zeros as
-        // necessary at the start to obtain the correct alignment.
-        maybe_misaligned = Vec::<u8>::with_capacity(written.len() + mem::align_of::<A>());
-        let start = maybe_misaligned.as_ptr() as usize % mem::align_of::<A>();
-        maybe_misaligned.resize(start, 0);
-        maybe_misaligned.extend_from_slice(&written);
-        &mut maybe_misaligned[start..start + written.len()]
-    };
-    debug_assert_eq!(0, npy.as_ptr() as usize % mem::align_of::<A>());
+    let mut npy = MaybeAlignedBytes::aligned_from_bytes(buf, mem::align_of::<A>());
 
     // The read/viewed array should be the same as the original.
     let read = Array::<A, D>::read_npy(&npy[..]).unwrap();
