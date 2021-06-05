@@ -18,7 +18,7 @@
 //!   - [`WriteNpyExt`] extension trait
 //!   - [`write_npy`] convenience function
 //!   - [`write_zeroed_npy`] to write an `.npy` file (sparse if possible) of zeroed data
-//! - Readonly viewing (primarily for use with memory-mapped files)
+//! - Immutable viewing (primarily for use with memory-mapped files)
 //!   - [`ViewNpyExt`] extension trait
 //! - Mutable viewing (primarily for use with memory-mapped files)
 //!   - [`ViewMutNpyExt`] extension trait
@@ -31,6 +31,12 @@
 //!
 //! - Reading: [`NpzReader`]
 //! - Writing: [`NpzWriter`]
+//! - Immutable viewing (primarily for use with memory-mapped files)
+//!   - [`NpzView`] providing an [`NpyView`] for each uncompressed `.npy` file
+//!     within the archive
+//! - Mutable viewing (primarily for use with memory-mapped files)
+//!   - [`NpzViewMut`] providing an [`NpyViewMut`] for each uncompressed `.npy`
+//!     file within the archive
 //!
 //! # Limitations
 //!
@@ -58,4 +64,7 @@ pub use crate::npy::{
     ViewNpyExt, WritableElement, WriteDataError, WriteNpyError, WriteNpyExt,
 };
 #[cfg(feature = "npz")]
-pub use crate::npz::{NpzReader, NpzWriter, ReadNpzError, WriteNpzError};
+pub use crate::npz::{
+    NpyView, NpyViewMut, NpzReader, NpzView, NpzViewMut, NpzWriter, ReadNpzError, ViewNpzError,
+    WriteNpzError,
+};

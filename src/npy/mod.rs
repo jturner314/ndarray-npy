@@ -699,13 +699,13 @@ impl From<ViewDataError> for ViewNpyError {
 ///
 /// # Example
 ///
-/// This is an example of opening a readonly memory-mapped file as an
+/// This is an example of opening an immutably memory-mapped file as an
 /// [`ArrayView`].
 ///
 /// This example uses the [`memmap2`](https://crates.io/crates/memmap2) crate
 /// because that appears to be the best-maintained memory-mapping crate at the
-/// moment, but `view_npy` takes a `&[u8]` instead of a file so that you can
-/// use the memory-mapping crate you're most comfortable with.
+/// moment, but [`Self::view_npy`] takes a `&[u8]` instead of a file so that you
+/// can use the memory-mapping crate you're most comfortable with.
 ///
 /// ```
 /// # if !cfg!(miri) { // Miri doesn't support mmap.
@@ -734,7 +734,7 @@ pub trait ViewNpyExt<'a>: Sized {
 /// shape/strides of the view will *not* modify the shape/strides of the array
 /// in the file.
 ///
-/// Notes:
+/// # Notes
 ///
 /// - For types for which not all bit patterns are valid, such as `bool`, the
 ///   implementation iterates over all of the elements when creating the view
@@ -748,14 +748,14 @@ pub trait ViewNpyExt<'a>: Sized {
 ///
 /// # Example
 ///
-/// This is an example of opening a writable memory-mapped file as an
+/// This is an example of opening a mutably memory-mapped file as an
 /// [`ArrayViewMut`]. Changes to the data in the view will modify the
 /// underlying file.
 ///
 /// This example uses the [`memmap2`](https://crates.io/crates/memmap2) crate
 /// because that appears to be the best-maintained memory-mapping crate at the
-/// moment, but `view_mut_npy` takes a `&mut [u8]` instead of a file so that
-/// you can use the memory-mapping crate you're most comfortable with.
+/// moment, but [`Self::view_mut_npy`] takes a `&mut [u8]` instead of a file so
+/// that you can use the memory-mapping crate you're most comfortable with.
 ///
 /// ```
 /// # if !cfg!(miri) { // Miri doesn't support mmap.
