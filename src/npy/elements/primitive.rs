@@ -1,6 +1,6 @@
 //! Trait implementations for primitive element types.
 
-use super::{
+use crate::{
     ReadDataError, ReadableElement, ViewDataError, ViewElement, ViewMutElement, WritableElement,
     WriteDataError,
 };

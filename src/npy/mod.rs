@@ -1,5 +1,5 @@
+mod elements;
 pub mod header;
-mod primitive;
 
 use self::header::{
     FormatHeaderError, Header, ParseHeaderError, ReadHeaderError, WriteHeaderError,
