@@ -1,135 +1,13 @@
 //! Trait implementations for primitive element types.
 
-use crate::{
-    ReadDataError, ReadableElement, ViewDataError, ViewElement, ViewMutElement, WritableElement,
-    WriteDataError,
-};
+use super::{bytes_as_mut_slice, bytes_as_slice, check_for_extra_bytes};
+use crate::{ReadDataError, ReadableElement, ViewDataError, ViewElement, ViewMutElement};
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 use py_literal::Value as PyValue;
 use std::error::Error;
 use std::fmt;
 use std::io;
 use std::mem;
-use std::slice;
-
-/// Returns `Ok(_)` iff the `reader` had no more bytes on entry to this
-/// function.
-///
-/// **Warning** This will consume the remainder of the reader.
-fn check_for_extra_bytes<R: io::Read>(reader: &mut R) -> Result<(), ReadDataError> {
-    let num_extra_bytes = reader.read_to_end(&mut Vec::new())?;
-    if num_extra_bytes == 0 {
-        Ok(())
-    } else {
-        Err(ReadDataError::ExtraBytes(num_extra_bytes))
-    }
-}
-
-/// Returns `Ok(_)` iff a slice containing `bytes_len` bytes is the correct length to cast to
-/// a slice with element type `T` and length `len`.
-///
-/// **Panics** if `len * size_of::<T>()` overflows.
-fn check_bytes_len<T>(bytes_len: usize, len: usize) -> Result<(), ViewDataError> {
-    use std::cmp::Ordering;
-    let needed_bytes = len
-        .checked_mul(mem::size_of::<T>())
-        .expect("Required number of bytes should not overflow.");
-    match bytes_len.cmp(&needed_bytes) {
-        Ordering::Less => Err(ViewDataError::MissingBytes(needed_bytes - bytes_len)),
-        Ordering::Equal => Ok(()),
-        Ordering::Greater => Err(ViewDataError::ExtraBytes(bytes_len - needed_bytes)),
-    }
-}
-
-/// Returns `Ok(_)` iff the slice of bytes is properly aligned to be cast to a
-/// slice with element type `T`.
-fn check_bytes_align<T>(bytes: &[u8]) -> Result<(), ViewDataError> {
-    if bytes.as_ptr() as usize % mem::align_of::<T>() == 0 {
-        Ok(())
-    } else {
-        Err(ViewDataError::Misaligned)
-    }
-}
-
-/// Cast `&[u8]` to `&[T]`, where the resulting slice should have length `len`.
-///
-/// Returns `Err` if the length or alignment of `bytes` is incorrect.
-///
-/// # Safety
-///
-/// The caller must ensure that the cast is valid for the type `T`. For
-/// example, this is not true for `bool` unless the caller has previously
-/// checked that the byte slice contains only `0x00` and `0x01` values. (This
-/// function checks only that the length and alignment are correct.)
-unsafe fn bytes_as_slice<T>(bytes: &[u8], len: usize) -> Result<&[T], ViewDataError> {
-    check_bytes_len::<T>(bytes.len(), len)?;
-    check_bytes_align::<T>(bytes)?;
-    Ok(slice::from_raw_parts(bytes.as_ptr().cast(), len))
-}
-
-/// Cast `&mut [u8]` to `&mut [T]`, where the resulting slice should have
-/// length `len`.
-///
-/// Returns `Err` if the length or alignment of `bytes` is incorrect.
-///
-/// # Safety
-///
-/// The caller must ensure that the cast is valid for the type `T`. For
-/// example, this is not true for `bool` unless the caller has previously
-/// checked that the byte slice contains only `0x00` and `0x01` values. (This
-/// function checks only that the length and alignment are correct.)
-unsafe fn bytes_as_mut_slice<T>(bytes: &mut [u8], len: usize) -> Result<&mut [T], ViewDataError> {
-    check_bytes_len::<T>(bytes.len(), len)?;
-    check_bytes_align::<T>(bytes)?;
-    Ok(slice::from_raw_parts_mut(bytes.as_mut_ptr().cast(), len))
-}
-
-macro_rules! impl_writable_primitive {
-    ($elem:ty, $little_desc:expr, $big_desc:expr) => {
-        unsafe impl WritableElement for $elem {
-            fn type_descriptor() -> PyValue {
-                if cfg!(target_endian = "little") {
-                    PyValue::String($little_desc.into())
-                } else if cfg!(target_endian = "big") {
-                    PyValue::String($big_desc.into())
-                } else {
-                    unreachable!()
-                }
-            }
-
-            fn write<W: io::Write>(&self, mut writer: W) -> Result<(), WriteDataError> {
-                // Function to ensure lifetime of bytes slice is correct.
-                fn cast(self_: &$elem) -> &[u8] {
-                    unsafe {
-                        let ptr: *const $elem = self_;
-                        #[allow(clippy::unknown_clippy_lints, clippy::size_of_in_element_count)]
-                        slice::from_raw_parts(ptr.cast::<u8>(), mem::size_of::<$elem>())
-                    }
-                }
-                writer.write_all(cast(self))?;
-                Ok(())
-            }
-
-            fn write_slice<W: io::Write>(
-                slice: &[Self],
-                mut writer: W,
-            ) -> Result<(), WriteDataError> {
-                // Function to ensure lifetime of bytes slice is correct.
-                fn cast(slice: &[$elem]) -> &[u8] {
-                    unsafe {
-                        #[allow(clippy::unknown_clippy_lints, clippy::size_of_in_element_count)]
-                        slice::from_raw_parts(
-                            slice.as_ptr().cast::<u8>(),
-                            slice.len() * mem::size_of::<$elem>(),
-                        )
-                    }
-                }
-                writer.write_all(cast(slice))?;
-                Ok(())
-            }
-        }
-    };
-}
 
 macro_rules! impl_readable_primitive_one_byte {
     ($elem:ty, [$($desc:expr),*], $zero:expr, $read_into:ident) => {
@@ -189,7 +67,7 @@ macro_rules! impl_view_and_view_mut_primitive_one_byte {
 
 macro_rules! impl_primitive_one_byte {
     ($elem:ty, $write_desc:expr, [$($read_desc:expr),*], $zero:expr, $read_into:ident) => {
-        impl_writable_primitive!($elem, $write_desc, $write_desc);
+        impl_writable_element_always_valid_cast!($elem, $write_desc, $write_desc);
         impl_readable_primitive_one_byte!($elem, [$($read_desc),*], $zero, $read_into);
         impl_view_and_view_mut_primitive_one_byte!($elem, [$($read_desc),*]);
     };
@@ -225,54 +103,14 @@ macro_rules! impl_readable_primitive_multi_byte {
     };
 }
 
-macro_rules! impl_view_and_view_mut_primitive_multi_byte {
-    ($elem:ty, $native_desc:expr, $non_native_desc:expr) => {
-        impl ViewElement for $elem {
-            fn bytes_as_slice<'a>(
-                bytes: &'a [u8],
-                type_desc: &PyValue,
-                len: usize,
-            ) -> Result<&'a [Self], ViewDataError> {
-                match *type_desc {
-                    PyValue::String(ref s) if s == $native_desc => unsafe {
-                        bytes_as_slice(bytes, len)
-                    },
-                    PyValue::String(ref s) if s == $non_native_desc => {
-                        Err(ViewDataError::NonNativeEndian)
-                    }
-                    ref other => Err(ViewDataError::WrongDescriptor(other.clone())),
-                }
-            }
-        }
-
-        impl ViewMutElement for $elem {
-            fn bytes_as_mut_slice<'a>(
-                bytes: &'a mut [u8],
-                type_desc: &PyValue,
-                len: usize,
-            ) -> Result<&'a mut [Self], ViewDataError> {
-                match *type_desc {
-                    PyValue::String(ref s) if s == $native_desc => unsafe {
-                        bytes_as_mut_slice(bytes, len)
-                    },
-                    PyValue::String(ref s) if s == $non_native_desc => {
-                        Err(ViewDataError::NonNativeEndian)
-                    }
-                    ref other => Err(ViewDataError::WrongDescriptor(other.clone())),
-                }
-            }
-        }
-    };
-}
-
 macro_rules! impl_primitive_multi_byte {
     ($elem:ty, $little_desc:expr, $big_desc:expr, $zero:expr, $read_into:ident) => {
-        impl_writable_primitive!($elem, $little_desc, $big_desc);
+        impl_writable_element_always_valid_cast!($elem, $little_desc, $big_desc);
         impl_readable_primitive_multi_byte!($elem, $little_desc, $big_desc, $zero, $read_into);
         #[cfg(target_endian = "little")]
-        impl_view_and_view_mut_primitive_multi_byte!($elem, $little_desc, $big_desc);
+        impl_view_and_view_mut_always_valid_cast_multi_byte!($elem, $little_desc, $big_desc);
         #[cfg(target_endian = "big")]
-        impl_view_and_view_mut_primitive_multi_byte!($elem, $big_desc, $little_desc);
+        impl_view_and_view_mut_always_valid_cast_multi_byte!($elem, $big_desc, $little_desc);
     };
 }
 
@@ -378,7 +216,7 @@ impl ReadableElement for bool {
 // Rust guarantees that `bool` is one byte, the bitwise representation of
 // `false` is `0x00`, and the bitwise representation of `true` is `0x01`, so we
 // can just cast the data in-place.
-impl_writable_primitive!(bool, "|b1", "|b1");
+impl_writable_element_always_valid_cast!(bool, "|b1", "|b1");
 
 impl ViewElement for bool {
     fn bytes_as_slice<'a>(
