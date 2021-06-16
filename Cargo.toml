@@ -14,12 +14,13 @@ edition = "2018"
 [dependencies]
 byteorder = "1.3.2"
 ndarray = "0.15"
+num-complex-0_4 = { package = "num-complex", version = "0.4", optional = true }
 num-traits = "0.2"
 py_literal = "0.4"
 zip = { version = "0.5", default-features = false, optional = true }
 
 [features]
-default = ["compressed_npz"]
+default = ["compressed_npz", "num-complex-0_4"]
 npz = ["zip"]
 compressed_npz = ["npz", "zip/deflate"]
 

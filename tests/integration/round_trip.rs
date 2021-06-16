@@ -7,6 +7,7 @@ use ndarray_npy::{
     ReadNpyExt, ReadableElement, ViewElement, ViewMutElement, ViewMutNpyExt, ViewNpyExt,
     WritableElement, WriteNpyExt,
 };
+use num_complex_0_4::Complex;
 use std::fmt::Debug;
 use std::mem;
 
@@ -144,6 +145,42 @@ fn round_trip_f64() {
         |mut v| {
             v[[0, 1]] = 12.;
             v[[1, 2]] = 42.;
+        },
+    );
+}
+
+#[test]
+fn round_trip_c32() {
+    test_round_trip_multiple_layouts(
+        array![
+            [
+                Complex::new(2.7f32, -40.4),
+                Complex::new(-23., 27.8),
+                Complex::new(-49., -43.3)
+            ],
+            [
+                Complex::new(-25.2, 11.8),
+                Complex::new(-8.9, -17.8),
+                Complex::new(36.4, -25.6)
+            ],
+        ]
+        .view(),
+        array![
+            [
+                Complex::new(2.7f32, 12.),
+                Complex::new(-23., 27.8),
+                Complex::new(-49., -43.3)
+            ],
+            [
+                Complex::new(-25.2, 11.8),
+                Complex::new(-8.9, -17.8),
+                Complex::new(42., -25.6)
+            ],
+        ]
+        .view(),
+        |mut v| {
+            v[[0, 0]].im = 12.;
+            v[[1, 2]].re = 42.;
         },
     );
 }

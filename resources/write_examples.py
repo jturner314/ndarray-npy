@@ -43,6 +43,22 @@ def main():
         dst='example_f64_big_endian_fortran.npy',
     )
     write_example_array(
+        SHAPE, dtype='<c16', order='C', f=lambda i: i - i * 1j,
+        dst='example_c64_little_endian_standard.npy',
+    )
+    write_example_array(
+        SHAPE, dtype='<c16', order='F', f=lambda i: i - i * 1j,
+        dst='example_c64_little_endian_fortran.npy',
+    )
+    write_example_array(
+        SHAPE, dtype='>c16', order='C', f=lambda i: i - i * 1j,
+        dst='example_c64_big_endian_standard.npy',
+    )
+    write_example_array(
+        SHAPE, dtype='>c16', order='F', f=lambda i: i - i * 1j,
+        dst='example_c64_big_endian_fortran.npy',
+    )
+    write_example_array(
         SHAPE, dtype='?', order='C', f=lambda i: (i % 5) % 2 == 0,
         dst='example_bool_standard.npy',
     )
