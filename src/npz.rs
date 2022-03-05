@@ -325,10 +325,14 @@ impl From<ViewNpyError> for ViewNpzError {
 /// - For types for which not all bit patterns are valid, such as `bool`, the
 ///   implementation iterates over all of the elements when creating the view
 ///   to ensure they have a valid bit pattern.
-///
-/// - The `.npy` files within the `.npz` archive must be at least 16-byte or
-///   ideally 64-byte aligned. Archives not created by this crate can be aligned
-///   with the help of the CLI tool [`rezip`] as in `rezip in.npz -o out.npz`.
+/// - The data in the buffer containing an `.npz` archive must be properly
+///   aligned for its `.npy` file with the maximum alignment requirement for its
+///   element type. Typically, this should not be a concern for memory-mapped
+///   files (unless an option like `MAP_FIXED` is used), since memory mappings
+///   are usually aligned to a page boundary.
+/// - The `.npy` files within the `.npz` archive must be properly aligned for
+///   their element type. Archives not created by this crate can be aligned with
+///   the help of the CLI tool [`rezip`] as in `rezip in.npz -o out.npz`.
 ///
 /// [`rezip`]: https://crates.io/crates/rezip
 ///
@@ -516,10 +520,14 @@ impl<'a> NpyView<'a> {
 /// - For types for which not all bit patterns are valid, such as `bool`, the
 ///   implementation iterates over all of the elements when creating the view
 ///   to ensure they have a valid bit pattern.
-///
-/// - The `.npy` files within the `.npz` archive must be at least 16-byte or
-///   ideally 64-byte aligned. Archives not created by this crate can be aligned
-///   with the help of the CLI tool [`rezip`] as in `rezip in.npz -o out.npz`.
+/// - The data in the buffer containing an `.npz` archive must be properly
+///   aligned for its `.npy` file with the maximum alignment requirement for its
+///   element type. Typically, this should not be a concern for memory-mapped
+///   files (unless an option like `MAP_FIXED` is used), since memory mappings
+///   are usually aligned to a page boundary.
+/// - The `.npy` files within the `.npz` archive must be properly aligned for
+///   their element type. Archives not created by this crate can be aligned with
+///   the help of the CLI tool [`rezip`] as in `rezip in.npz -o out.npz`.
 ///
 /// [`rezip`]: https://crates.io/crates/rezip
 ///
