@@ -339,9 +339,9 @@ impl From<ViewNpyError> for ViewNpzError {
 /// # Example
 ///
 /// This is an example of opening an immutably memory-mapped `.npz` archive as
-/// an [`NpzView`] providing an [`NpyView`] for each uncompressed `.npy` file
-/// within the archive which can be accessed via [`NpyView::view`] as
-/// immutable [`ArrayView`].
+/// an [`NpzView`] providing an [`NpyView`] for each uncompressed and
+/// non-encrypted `.npy` file within the archive which can be accessed via
+/// [`NpyView::view`] as immutable [`ArrayView`].
 ///
 /// This example uses the [`memmap2`](https://crates.io/crates/memmap2) crate
 /// because that appears to be the best-maintained memory-mapping crate at the
@@ -355,7 +355,8 @@ impl From<ViewNpyError> for ViewNpzError {
 /// use ndarray_npy::{NpzView, ViewNpzError};
 /// use ndarray::Ix1;
 ///
-/// // Open `.npz` archive of uncompressed `.npy` files in native endian.
+/// // Open `.npz` archive of uncompressed and non-encrypted `.npy` files in
+/// // native endian.
 /// #[cfg(target_endian = "little")]
 /// let file = OpenOptions::new().read(true)
 ///     .open("tests/examples_little_endian_64_byte_aligned.npz").unwrap();
@@ -365,7 +366,7 @@ impl From<ViewNpyError> for ViewNpzError {
 /// // Memory-map `.npz` archive of 64-byte aligned `.npy` files.
 /// let mmap = unsafe { MmapOptions::new().map(&file).unwrap() };
 /// let npz = NpzView::new(&mmap)?;
-/// // List uncompressed files only.
+/// // List uncompressed and non-encrypted files only.
 /// for npy in npz.names() {
 ///     println!("{}", npy);
 /// }
@@ -397,7 +398,12 @@ impl<'a> NpzView<'a> {
         let mut names = HashMap::new();
         let mut index = 0;
         for zip_index in 0..zip.len() {
-            let file = zip.by_index(zip_index)?;
+            // Skip encrypted files.
+            let file = match zip.by_index(zip_index) {
+                Err(ZipError::UnsupportedArchive(ZipError::PASSWORD_REQUIRED)) => continue,
+                Err(err) => Err(err)?,
+                Ok(file) => file,
+            };
             // Skip directories and compressed files.
             if file.is_dir() || file.compression() != CompressionMethod::Stored {
                 continue;
@@ -439,7 +445,7 @@ impl<'a> NpzView<'a> {
                         central_crc32,
                     },
                 );
-                // Increment index of uncompressed files.
+                // Increment index of uncompressed and non-encrypted files.
                 index += 1;
             } else {
                 return Err(ZipError::InvalidArchive("Length overflow").into());
@@ -448,17 +454,19 @@ impl<'a> NpzView<'a> {
         Ok(Self { files, names })
     }
 
-    /// Returns `true` iff the `.npz` file doesn't contain any **uncompressed** arrays.
+    /// Returns `true` iff the `.npz` file doesn't contain any **uncompressed** and
+    /// **non-encrypted** arrays.
     pub fn is_empty(&self) -> bool {
         self.names.is_empty()
     }
 
-    /// Returns the number of **uncompressed** arrays in the `.npz` file.
+    /// Returns the number of **uncompressed** and **non-encrypted** arrays in the `.npz` file.
     pub fn len(&self) -> usize {
         self.names.len()
     }
 
-    /// Returns the names of all of the **uncompressed** arrays in the `.npz` file.
+    /// Returns the names of all of the **uncompressed** and **non-encrypted** arrays in the `.npz`
+    /// file.
     pub fn names(&self) -> impl Iterator<Item = &str> {
         self.names.keys().map(String::as_str)
     }
@@ -475,8 +483,8 @@ impl<'a> NpzView<'a> {
 
     /// Returns an immutable `.npy` file view by index in `0..len()`.
     ///
-    /// The index **does not** correspond to the index of the zip archive if uncompressed files
-    /// are preceded by compressed files since latter are skipped.
+    /// The index **does not** necessarily correspond to the index of the zip archive as compressed
+    /// and encrypted files are skipped.
     pub fn by_index(&self, index: usize) -> Result<NpyView<'a>, ViewNpzError> {
         self.files
             .get(&index)
@@ -539,11 +547,11 @@ impl<'a> NpyView<'a> {
 /// # Example
 ///
 /// This is an example of opening a mutably memory-mapped `.npz` archive as an
-/// [`NpzViewMut`] providing an [`NpyViewMut`] for each uncompressed `.npy` file
-/// within the archive which can be accessed via [`NpyViewMut::view`] as
-/// immutable [`ArrayView`] or via [`NpyViewMut::view_mut`] as mutable
-/// [`ArrayViewMut`]. Changes to the data in the view will modify the underlying
-/// file within the archive.
+/// [`NpzViewMut`] providing an [`NpyViewMut`] for each uncompressed and
+/// non-encrypted `.npy` file within the archive which can be accessed via
+/// [`NpyViewMut::view`] as immutable [`ArrayView`] or via
+/// [`NpyViewMut::view_mut`] as mutable [`ArrayViewMut`]. Changes to the data in
+/// the view will modify the underlying file within the archive.
 ///
 /// This example uses the [`memmap2`](https://crates.io/crates/memmap2) crate
 /// because that appears to be the best-maintained memory-mapping crate at the
@@ -559,7 +567,8 @@ impl<'a> NpyView<'a> {
 /// use ndarray_npy::{NpzViewMut, ViewNpzError};
 /// use ndarray::Ix1;
 ///
-/// // Open `.npz` archive of uncompressed `.npy` files in native endian.
+/// // Open `.npz` archive of uncompressed and non-encrypted `.npy` files in
+/// // native endian.
 /// #[cfg(target_endian = "little")]
 /// let mut file = OpenOptions::new().read(true).write(true)
 ///     .open("tests/examples_little_endian_64_byte_aligned.npz").unwrap();
@@ -569,7 +578,7 @@ impl<'a> NpyView<'a> {
 /// // Memory-map `.npz` archive of 64-byte aligned `.npy` files.
 /// let mut mmap = unsafe { MmapOptions::new().map_mut(&file).unwrap() };
 /// let mut npz = NpzViewMut::new(&mut mmap)?;
-/// // List uncompressed files only.
+/// // List uncompressed and non-encrypted files only.
 /// for npy in npz.names() {
 ///     println!("{}", npy);
 /// }
@@ -605,7 +614,12 @@ impl<'a> NpzViewMut<'a> {
         let mut splits = BTreeMap::new();
         let mut index = 0;
         for zip_index in 0..zip.len() {
-            let file = zip.by_index(zip_index)?;
+            // Skip encrypted files.
+            let file = match zip.by_index(zip_index) {
+                Err(ZipError::UnsupportedArchive(ZipError::PASSWORD_REQUIRED)) => continue,
+                Err(err) => Err(err)?,
+                Ok(file) => file,
+            };
             // Skip directories and compressed files.
             if file.is_dir() || file.compression() != CompressionMethod::Stored {
                 continue;
@@ -654,7 +668,7 @@ impl<'a> NpzViewMut<'a> {
                 splits.insert(central_crc32.start, central_crc32.end);
                 // Store ranges by file index.
                 ranges.insert(index, (crc32, data, central_crc32));
-                // Increment index of uncompressed files.
+                // Increment index of uncompressed and non-encrypted files.
                 index += 1;
             } else {
                 return Err(ZipError::InvalidArchive("Length overflow").into());
@@ -707,17 +721,18 @@ impl<'a> NpzViewMut<'a> {
         Ok(Self { files, names })
     }
 
-    /// Returns `true` iff the `.npz` file doesn't contain any **uncompressed** arrays.
+    /// Returns `true` iff the `.npz` file doesn't contain any **uncompressed** and
+    /// **non-encrypted** arrays.
     pub fn is_empty(&self) -> bool {
         self.names.is_empty()
     }
 
-    /// Returns the number of **uncompressed** arrays in the `.npz` file.
+    /// Returns the number of **uncompressed** and **non-encrypted** arrays in the `.npz` file.
     pub fn len(&self) -> usize {
         self.names.len()
     }
 
-    /// Returns the names of all of the **uncompressed** arrays in the file.
+    /// Returns the names of all of the **uncompressed** and **non-encrypted** arrays in the file.
     pub fn names(&self) -> impl Iterator<Item = &str> {
         self.names.keys().map(String::as_str)
     }
@@ -734,8 +749,8 @@ impl<'a> NpzViewMut<'a> {
 
     /// Moves a mutable `.npy` file view by index in `0..len()` out of the `.npz` file view.
     ///
-    /// The index **does not** correspond to the index of the zip archive if uncompressed files
-    /// are preceded by compressed files since latter are skipped.
+    /// The index **does not** necessarily correspond to the index of the zip archive as compressed
+    /// and encrypted files are skipped.
     pub fn by_index(&mut self, index: usize) -> Result<NpyViewMut<'a>, ViewNpzError> {
         if index > self.names.len() {
             Err(ZipError::FileNotFound.into())
