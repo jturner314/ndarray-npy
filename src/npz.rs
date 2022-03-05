@@ -349,6 +349,7 @@ impl From<ViewNpyError> for ViewNpzError {
 /// can use the memory-mapping crate you're most comfortable with.
 ///
 /// ```
+/// # if !cfg!(miri) { // Miri doesn't support mmap.
 /// use std::fs::OpenOptions;
 /// use memmap2::MmapOptions;
 /// use ndarray_npy::{NpzView, ViewNpzError};
@@ -379,7 +380,8 @@ impl From<ViewNpyError> for ViewNpzError {
 /// let y_array_view = y_npy_view.view::<f64, Ix1>()?;
 /// println!("{}", x_array_view);
 /// println!("{}", y_array_view);
-/// # Ok::<(), ViewNpzError>(())
+/// # }
+/// # Ok::<(), ndarray_npy::ViewNpzError>(())
 /// ```
 #[derive(Debug, Clone)]
 pub struct NpzView<'a> {
@@ -551,6 +553,7 @@ impl<'a> NpyView<'a> {
 /// # Example
 ///
 /// ```
+/// # if !cfg!(miri) { // Miri doesn't support mmap.
 /// use std::fs::OpenOptions;
 /// use memmap2::MmapOptions;
 /// use ndarray_npy::{NpzViewMut, ViewNpzError};
@@ -584,7 +587,8 @@ impl<'a> NpyView<'a> {
 /// // Update CRC-32 checksums after changes. Automatically updated on `drop()`.
 /// x_npy_view_mut.update();
 /// y_npy_view_mut.update();
-/// # Ok::<(), ViewNpzError>(())
+/// # }
+/// # Ok::<(), ndarray_npy::ViewNpzError>(())
 /// ```
 #[derive(Debug)]
 pub struct NpzViewMut<'a> {
