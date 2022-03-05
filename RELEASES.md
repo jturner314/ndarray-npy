@@ -1,3 +1,8 @@
+# 0.8.1
+
+* Added support for complex floating point element types with the new
+  `num-complex-0_4` feature.
+
 # 0.8.0
 
 * Updated to `ndarray` 0.15.

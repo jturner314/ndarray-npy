@@ -67,7 +67,7 @@ impl From<WriteNpyError> for WriteNpzError {
 /// # Example
 ///
 /// ```no_run
-/// use ndarray::{array, Array1, Array2};
+/// use ndarray::{array, aview0, Array1, Array2};
 /// use ndarray_npy::NpzWriter;
 /// use std::fs::File;
 ///
@@ -76,6 +76,7 @@ impl From<WriteNpyError> for WriteNpzError {
 /// let b: Array1<i32> = array![7, 8, 9];
 /// npz.add_array("a", &a)?;
 /// npz.add_array("b", &b)?;
+/// npz.add_array("c", &aview0(&10))?;
 /// npz.finish()?;
 /// # Ok::<_, Box<dyn std::error::Error>>(())
 /// ```
@@ -112,6 +113,9 @@ impl<W: Write + Seek> NpzWriter<W> {
     }
 
     /// Adds an array with the specified `name` to the `.npz` file.
+    ///
+    /// To write a scalar value, create a zero-dimensional array using [`arr0`](ndarray::arr0) or
+    /// [`aview0`](ndarray::aview0).
     pub fn add_array<N, S, D>(
         &mut self,
         name: N,

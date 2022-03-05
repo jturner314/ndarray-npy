@@ -18,9 +18,9 @@ from/to [`.npy`] and [`.npz`] files. See the
 
 **This crate is a work-in-progress.** It currently supports only a subset of
 `.npy` header descriptors and supports only primitive fixed-size integer,
-floating point, and `bool` types as the array element type. You can implement
-the `*Element` traits for your own types, but the next breaking release of this
-library will probably change those traits.
+primitive floating point, complex floating point, and `bool` types as the array
+element type. You can implement the `*Element` traits for your own types, but
+the next breaking release of this library will probably change those traits.
 
 Future plans include support for:
 
@@ -38,35 +38,43 @@ To use with the default features:
 
 ```toml
 [dependencies]
-ndarray-npy = "0.8"
+ndarray-npy = "0.8.1"
 ```
 
 The `default` feature set includes the `compressed_npz` feature, which enables
-support for uncompresssed and compressed `.npz` files. This requires a
-dependency on the [`zip` crate] and a compression backend crate.
+support for uncompresssed and compressed `.npz` files, and the
+`num-complex-0_4` feature, which enables support for complex floating point
+element types provided by version 0.4 of the [`num-complex` crate]. The
+`compressed_npz` feature requires a dependency on the [`zip` crate] and a
+compression backend crate.
+
+[`num-complex` crate]: https://crates.io/crates/num-complex
 
 To use without the default features:
 
 ```toml
 [dependencies]
-ndarray-npy = { version = "0.8", default-features = false }
+ndarray-npy = { version = "0.8.1", default-features = false }
 ```
 
 With `default-features = false`, `ndarray-npy` provides support only for `.npy`
-files, not `.npz` files. If you want `.npz` file support, you can select
-additional features:
+files, not `.npz` files, and it does not provide support for complex number
+elements. If you want support for `.npz` files or complex number elements, you
+can select additional features:
 
 * `npz` enables support for uncompressed `.npz` files. This requires a
   dependency on the [`zip` crate].
 * `compressed_npz` enables support for uncompressed and compressed `.npz`
   files. This requires a dependency on the [`zip` crate] and a compression
   backend crate.
+* `num-complex-0_4` enables support for complex floating point element types
+  provided by version 0.4 of the [`num-complex` crate].
 
 For example, you can use just the `npz` feature:
 
 ```toml
 [dependencies.ndarray-npy]
-version = "0.8"
+version = "0.8.1"
 default-features = false
 features = ["npz"]
 ```
@@ -79,7 +87,7 @@ Library authors should specify their dependency on `ndarray-npy` like this:
 
 ```toml
 [dependencies.ndarray-npy]
-version = "0.8"
+version = "0.8.1"
 default-features = false
 features = [FEATURES_LIST_HERE]
 ```
@@ -89,6 +97,12 @@ where the `features` list is one of the following:
 * `[]` if your crate does not depend on `.npz` file support
 * `["npz"]` if your crate depends on `.npz` file support but not compression
 * `["compressed_npz"]` if your crate depends on `.npz` file support with compression
+* `["num-complex-0_4"]` if your crate depends on support for complex element
+  types but not `.npz` files
+* `["num-complex-0_4", "npz"]` if your crate depends on support for complex
+  element types and `.npz` files but not compression
+* `["num-complex-0_4", "compressed_npz"]` if your crate depends on support for
+  complex element types and `.npz` files with compression
 
 ## Releases
 

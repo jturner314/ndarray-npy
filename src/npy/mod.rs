@@ -1,5 +1,5 @@
+mod elements;
 pub mod header;
-mod primitive;
 
 use self::header::{
     FormatHeaderError, Header, ParseHeaderError, ReadHeaderError, WriteHeaderError,
@@ -791,7 +791,7 @@ where
         let shape = header.shape.into_dimension();
         let ndim = shape.ndim();
         let len = shape_length_checked::<A>(&shape).ok_or(ViewNpyError::LengthOverflow)?;
-        let data = A::bytes_as_slice(&reader, &header.type_descriptor, len)?;
+        let data = A::bytes_as_slice(reader, &header.type_descriptor, len)?;
         ArrayView::from_shape(shape.set_f(header.fortran_order), data)
             .unwrap()
             .into_dimensionality()

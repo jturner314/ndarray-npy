@@ -7,6 +7,7 @@ use ndarray_npy::{
     write_zeroed_npy, ReadNpyError, ReadNpyExt, ViewMutNpyExt, ViewNpyError, ViewNpyExt,
     WriteNpyExt,
 };
+use num_complex_0_4::Complex;
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::mem;
@@ -29,6 +30,25 @@ fn write_f64_standard() {
 }
 
 #[test]
+fn write_c64_standard() {
+    #[cfg(target_endian = "little")]
+    let path = "resources/example_c64_little_endian_standard.npy";
+    #[cfg(target_endian = "big")]
+    let path = "resources/example_c64_big_endian_standard.npy";
+
+    let correct = fs::read(path).unwrap();
+    let mut writer = Vec::<u8>::new();
+    let mut arr = Array3::<Complex<f64>>::zeros((2, 3, 4));
+    for (i, elem) in arr.iter_mut().enumerate() {
+        // The `+ 0.` is necessary to get the same behavior as Python with
+        // respect to signed zeros.
+        *elem = Complex::new(i as f64, -(i as f64) + 0.);
+    }
+    arr.write_npy(&mut writer).unwrap();
+    assert_eq!(&correct, &writer);
+}
+
+#[test]
 fn write_f64_fortran() {
     #[cfg(target_endian = "little")]
     let path = "resources/example_f64_little_endian_fortran.npy";
@@ -40,6 +60,25 @@ fn write_f64_fortran() {
     let mut arr = Array3::<f64>::zeros((2, 3, 4).f());
     for (i, elem) in arr.iter_mut().enumerate() {
         *elem = i as f64;
+    }
+    arr.write_npy(&mut writer).unwrap();
+    assert_eq!(&correct[..], &writer[..]);
+}
+
+#[test]
+fn write_c64_fortran() {
+    #[cfg(target_endian = "little")]
+    let path = "resources/example_c64_little_endian_fortran.npy";
+    #[cfg(target_endian = "big")]
+    let path = "resources/example_c64_big_endian_fortran.npy";
+
+    let correct = fs::read(path).unwrap();
+    let mut writer = Vec::<u8>::new();
+    let mut arr = Array3::<Complex<f64>>::zeros((2, 3, 4).f());
+    for (i, elem) in arr.iter_mut().enumerate() {
+        // The `+ 0.` is necessary to get the same behavior as Python with
+        // respect to signed zeros.
+        *elem = Complex::new(i as f64, -(i as f64) + 0.);
     }
     arr.write_npy(&mut writer).unwrap();
     assert_eq!(&correct[..], &writer[..]);
@@ -65,6 +104,27 @@ fn write_f64_discontiguous() {
 }
 
 #[test]
+fn write_c64_discontiguous() {
+    #[cfg(target_endian = "little")]
+    let path = "resources/example_c64_little_endian_standard.npy";
+    #[cfg(target_endian = "big")]
+    let path = "resources/example_c64_big_endian_standard.npy";
+
+    let correct = fs::read(path).unwrap();
+    let mut writer = Vec::<u8>::new();
+    let mut arr = Array3::<Complex<f64>>::zeros((3, 4, 4));
+    arr.slice_axis_inplace(Axis(1), Slice::new(0, None, 2));
+    arr.swap_axes(0, 1);
+    for (i, elem) in arr.iter_mut().enumerate() {
+        // The `+ 0.` is necessary to get the same behavior as Python with
+        // respect to signed zeros.
+        *elem = Complex::new(i as f64, -(i as f64) + 0.);
+    }
+    arr.write_npy(&mut writer).unwrap();
+    assert_eq!(&correct, &writer);
+}
+
+#[test]
 fn read_f64_standard() {
     let mut correct = Array3::<f64>::zeros((2, 3, 4));
     for (i, elem) in correct.iter_mut().enumerate() {
@@ -82,6 +142,23 @@ fn read_f64_standard() {
 }
 
 #[test]
+fn read_c64_standard() {
+    let mut correct = Array3::<Complex<f64>>::zeros((2, 3, 4));
+    for (i, elem) in correct.iter_mut().enumerate() {
+        *elem = Complex::new(i as f64, -(i as f64));
+    }
+    for path in &[
+        "resources/example_c64_little_endian_standard.npy",
+        "resources/example_c64_big_endian_standard.npy",
+    ] {
+        let file = File::open(path).unwrap();
+        let arr = Array3::<Complex<f64>>::read_npy(file).unwrap();
+        assert_eq!(correct, arr);
+        assert!(arr.is_standard_layout());
+    }
+}
+
+#[test]
 fn read_f64_fortran() {
     let mut correct = Array3::<f64>::zeros((2, 3, 4).f());
     for (i, elem) in correct.iter_mut().enumerate() {
@@ -93,6 +170,23 @@ fn read_f64_fortran() {
     ] {
         let file = File::open(path).unwrap();
         let arr = Array3::<f64>::read_npy(file).unwrap();
+        assert_eq!(correct, arr);
+        assert!(arr.t().is_standard_layout());
+    }
+}
+
+#[test]
+fn read_c64_fortran() {
+    let mut correct = Array3::<Complex<f64>>::zeros((2, 3, 4).f());
+    for (i, elem) in correct.iter_mut().enumerate() {
+        *elem = Complex::new(i as f64, -(i as f64));
+    }
+    for path in &[
+        "resources/example_c64_little_endian_fortran.npy",
+        "resources/example_c64_big_endian_fortran.npy",
+    ] {
+        let file = File::open(path).unwrap();
+        let arr = Array3::<Complex<f64>>::read_npy(file).unwrap();
         assert_eq!(correct, arr);
         assert!(arr.t().is_standard_layout());
     }
@@ -137,6 +231,24 @@ fn view_f64_standard() {
 }
 
 #[test]
+fn view_c64_standard() {
+    #[cfg(target_endian = "little")]
+    let path = "resources/example_c64_little_endian_standard.npy";
+    #[cfg(target_endian = "big")]
+    let path = "resources/example_c64_big_endian_standard.npy";
+
+    let mut correct = Array3::<Complex<f64>>::zeros((2, 3, 4));
+    for (i, elem) in correct.iter_mut().enumerate() {
+        *elem = Complex::new(i as f64, -(i as f64));
+    }
+    let file = File::open(path).unwrap();
+    let bytes = unsafe { file_to_aligned_bytes(&file).unwrap() };
+    let view = ArrayView3::<Complex<f64>>::view_npy(&bytes).unwrap();
+    assert_eq!(correct, view);
+    assert!(view.is_standard_layout());
+}
+
+#[test]
 fn view_f64_fortran() {
     #[cfg(target_endian = "little")]
     let path = "resources/example_f64_little_endian_fortran.npy";
@@ -150,6 +262,24 @@ fn view_f64_fortran() {
     let file = File::open(path).unwrap();
     let bytes = unsafe { file_to_aligned_bytes(&file).unwrap() };
     let view = ArrayView3::<f64>::view_npy(&bytes).unwrap();
+    assert_eq!(correct, view);
+    assert!(view.t().is_standard_layout());
+}
+
+#[test]
+fn view_c64_fortran() {
+    #[cfg(target_endian = "little")]
+    let path = "resources/example_c64_little_endian_fortran.npy";
+    #[cfg(target_endian = "big")]
+    let path = "resources/example_c64_big_endian_fortran.npy";
+
+    let mut correct = Array3::<Complex<f64>>::zeros((2, 3, 4));
+    for (i, elem) in correct.iter_mut().enumerate() {
+        *elem = Complex::new(i as f64, -(i as f64));
+    }
+    let file = File::open(path).unwrap();
+    let bytes = unsafe { file_to_aligned_bytes(&file).unwrap() };
+    let view = ArrayView3::<Complex<f64>>::view_npy(&bytes).unwrap();
     assert_eq!(correct, view);
     assert!(view.t().is_standard_layout());
 }

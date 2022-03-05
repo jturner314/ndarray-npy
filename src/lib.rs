@@ -46,8 +46,8 @@
 //!
 //! * The element traits ([`WritableElement`], [`ReadableElement`],
 //!   [`ViewElement`], and [`ViewMutElement`]) are currently implemented only
-//!   for fixed-size integers up to 64 bits, floating point numbers, and
-//!   [`bool`].
+//!   for fixed-size integers up to 64 bits, floating point numbers, complex
+//!   floating point numbers (if enabled with the crate feature), and [`bool`].
 //!
 //! The plan is to add support for more element types (including custom
 //! user-defined structs) in the future.
