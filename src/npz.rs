@@ -658,13 +658,15 @@ impl<'a> NpzViewMut<'a> {
         let mut slices = HashMap::new();
         for (&start, &end) in &splits {
             // Split off leading bytes.
-            let mid = start - offset;
+            let mid = start
+                .checked_sub(offset)
+                .ok_or(ZipError::InvalidArchive("Overlapping ranges"))?;
             if mid > bytes.len() {
                 return Err(ZipError::InvalidArchive("Offset exceeds EOF").into());
             }
             let (slice, remaining_bytes) = bytes.split_at_mut(mid);
             offset += slice.len();
-            // Split off leading borrow of interest.
+            // Split off leading borrow of interest. Cannot underflow since `start < end`.
             let mid = end - offset;
             if mid > remaining_bytes.len() {
                 return Err(ZipError::InvalidArchive("Length exceeds EOF").into());
