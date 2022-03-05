@@ -2,7 +2,6 @@ use crate::{
     ReadNpyError, ReadNpyExt, ReadableElement, ViewElement, ViewMutElement, ViewMutNpyExt,
     ViewNpyError, ViewNpyExt, WritableElement, WriteNpyError, WriteNpyExt,
 };
-use crc32fast::Hasher;
 use ndarray::prelude::*;
 use ndarray::{Data, DataOwned};
 use std::collections::{BTreeMap, HashMap};
@@ -10,6 +9,7 @@ use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
 use std::io::{self, BufWriter, Cursor, Read, Seek, Write};
+use std::ops::Range;
 use zip::result::ZipError;
 use zip::write::FileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -400,19 +400,19 @@ impl<'a> NpzView<'a> {
             let name = file.name().to_string();
             names.insert(name, index);
             // Get data slice.
-            let data = file
-                .data_start()
-                .try_into()
-                .ok()
-                .and_then(|data_start: usize| {
-                    file.size()
-                        .try_into()
-                        .ok()
-                        .and_then(|size: usize| data_start.checked_add(size))
-                        .and_then(|data_end| bytes.get(data_start..data_end))
-                });
+            let data: Option<&[u8]> =
+                file.data_start()
+                    .try_into()
+                    .ok()
+                    .and_then(|data_start: usize| {
+                        file.size()
+                            .try_into()
+                            .ok()
+                            .and_then(|size: usize| data_start.checked_add(size))
+                            .and_then(|data_end| bytes.get(data_start..data_end))
+                    });
             // Get central CRC-32 slice.
-            let central_crc32 = file
+            let central_crc32: Option<&[u8]> = file
                 .central_header_start()
                 .try_into()
                 .ok()
@@ -599,7 +599,7 @@ impl<'a> NpzViewMut<'a> {
             let name = file.name().to_string();
             names.insert(name, index);
             // Get local CRC-32 range.
-            let crc32 = file
+            let crc32: Option<Range<usize>> = file
                 .header_start()
                 .try_into()
                 .ok()
@@ -610,19 +610,19 @@ impl<'a> NpzViewMut<'a> {
                         .map(|crc32_end| crc32_start..crc32_end)
                 });
             // Get data range.
-            let data = file
-                .data_start()
-                .try_into()
-                .ok()
-                .and_then(|data_start: usize| {
-                    file.size()
-                        .try_into()
-                        .ok()
-                        .and_then(|size: usize| data_start.checked_add(size))
-                        .map(|data_end| data_start..data_end)
-                });
+            let data: Option<Range<usize>> =
+                file.data_start()
+                    .try_into()
+                    .ok()
+                    .and_then(|data_start: usize| {
+                        file.size()
+                            .try_into()
+                            .ok()
+                            .and_then(|size: usize| data_start.checked_add(size))
+                            .map(|data_end| data_start..data_end)
+                    });
             // Get central CRC-32 range.
-            let central_crc32 = file
+            let central_crc32: Option<Range<usize>> = file
                 .central_header_start()
                 .try_into()
                 .ok()
@@ -671,9 +671,9 @@ impl<'a> NpzViewMut<'a> {
         // Collect split borrows as file views.
         let mut files = HashMap::new();
         for (&index, (crc32, data, central_crc32)) in &ranges {
-            let crc32 = slices.remove(&crc32.start);
-            let data = slices.remove(&data.start);
-            let central_crc32 = slices.remove(&central_crc32.start);
+            let crc32: Option<&mut [u8]> = slices.remove(&crc32.start);
+            let data: Option<&mut [u8]> = slices.remove(&data.start);
+            let central_crc32: Option<&mut [u8]> = slices.remove(&central_crc32.start);
             if let (Some(crc32), Some(data), Some(central_crc32)) = (crc32, data, central_crc32) {
                 files.insert(
                     index,
@@ -795,7 +795,7 @@ fn crc32_verify(bytes: &[u8], crc32: &[u8]) -> Result<(), ZipError> {
 }
 
 fn crc32_update(bytes: &[u8]) -> [u8; 4] {
-    let mut hasher = Hasher::new();
+    let mut hasher = crc32fast::Hasher::new();
     hasher.update(bytes);
     hasher.finalize().to_le_bytes()
 }
