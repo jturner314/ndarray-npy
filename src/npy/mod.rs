@@ -638,7 +638,8 @@ impl fmt::Display for ViewNpyError {
             }
             ViewNpyError::MisalignedData => write!(
                 f,
-                "start of data is not properly aligned for the element type"
+                "start of data is not properly aligned for the element type; \
+                 if this is an npz archive, try running 'rezip in.npz -o out.npz'"
             ),
             ViewNpyError::MissingBytes(num_missing_bytes) => write!(
                 f,

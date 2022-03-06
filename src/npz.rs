@@ -267,8 +267,6 @@ pub enum ViewNpzError {
     Zip(ZipError),
     /// An error caused by viewing an inner `.npy` file.
     Npy(ViewNpyError),
-    /// The start of the data is not properly aligned for the element type.
-    MisalignedData,
     /// A mutable `.npy` file view has already been moved out of its `.npz` file view.
     MovedNpyViewMut,
 }
@@ -278,7 +276,6 @@ impl Error for ViewNpzError {
         match self {
             ViewNpzError::Zip(err) => Some(err),
             ViewNpzError::Npy(err) => Some(err),
-            ViewNpzError::MisalignedData => None,
             ViewNpzError::MovedNpyViewMut => None,
         }
     }
@@ -289,10 +286,6 @@ impl fmt::Display for ViewNpzError {
         match self {
             ViewNpzError::Zip(err) => write!(f, "zip file error: {}", err),
             ViewNpzError::Npy(err) => write!(f, "error viewing npy file in npz archive: {}", err),
-            ViewNpzError::MisalignedData => write!(
-                f,
-                "cannot cast unaligned array data, try 'rezip in.npz -o out.npz'"
-            ),
             ViewNpzError::MovedNpyViewMut => write!(
                 f,
                 "mutable npy file view already moved out of npz file view"
@@ -309,10 +302,7 @@ impl From<ZipError> for ViewNpzError {
 
 impl From<ViewNpyError> for ViewNpzError {
     fn from(err: ViewNpyError) -> ViewNpzError {
-        match err {
-            ViewNpyError::MisalignedData => ViewNpzError::MisalignedData,
-            _ => ViewNpzError::Npy(err),
-        }
+        ViewNpzError::Npy(err)
     }
 }
 
