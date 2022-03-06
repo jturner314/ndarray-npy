@@ -65,6 +65,6 @@ pub use crate::npy::{
 };
 #[cfg(feature = "npz")]
 pub use crate::npz::{
-    NpyView, NpyViewMut, NpzReader, NpzView, NpzViewMut, NpzWriter, ReadNpzError, ViewNpzError,
-    WriteNpzError,
+    ChecksumStatus, NpyView, NpyViewMut, NpzReader, NpzView, NpzViewMut, NpzWriter, ReadNpzError,
+    ViewNpzError, WriteNpzError,
 };

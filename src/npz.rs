@@ -374,8 +374,8 @@ impl From<ViewNpyError> for ViewNpzError {
 ///     println!("{}", npy);
 /// }
 /// // Get immutable `.npy` views.
-/// let x_npy_view = npz.by_name("i64.npy")?;
-/// let y_npy_view = npz.by_name("f64.npy")?;
+/// let mut x_npy_view = npz.by_name("i64.npy")?;
+/// let mut y_npy_view = npz.by_name("f64.npy")?;
 /// // Optionally verify CRC-32 checksums.
 /// x_npy_view.verify()?;
 /// y_npy_view.verify()?;
@@ -464,6 +464,7 @@ impl<'a> NpzView<'a> {
                     NpyView {
                         data,
                         central_crc32,
+                        status: ChecksumStatus::default(),
                     },
                 );
                 // Increment index of non-compressed and non-encrypted files.
@@ -548,13 +549,24 @@ impl<'a> NpzView<'a> {
 pub struct NpyView<'a> {
     data: &'a [u8],
     central_crc32: &'a [u8],
+    status: ChecksumStatus,
 }
 
 impl<'a> NpyView<'a> {
+    /// CRC-32 checksum status.
+    pub fn status(&self) -> ChecksumStatus {
+        self.status
+    }
     /// Verifies CRC-32 checksum by reading the whole array.
-    pub fn verify(&self) -> Result<(), ViewNpzError> {
+    ///
+    /// Changes checksum [`status`]([`Self::status()`]) to [`Outdated`](`ChecksumStatus::Outdated`)
+    /// if invalid or [`Correct`](`ChecksumStatus::Correct`) if valid.
+    pub fn verify(&mut self) -> Result<(), ViewNpzError> {
+        self.status = ChecksumStatus::Outdated;
         // Like the `zip` crate, verify only against central CRC-32.
-        Ok(crc32_verify(self.data, self.central_crc32)?)
+        crc32_verify(self.data, self.central_crc32)?;
+        self.status = ChecksumStatus::Correct;
+        Ok(())
     }
 
     /// Returns an immutable view of a memory-mapped `.npy` file.
@@ -840,6 +852,7 @@ impl<'a> NpzViewMut<'a> {
                         crc32,
                         data,
                         central_crc32,
+                        status: ChecksumStatus::default(),
                     },
                 );
             } else {
@@ -921,19 +934,42 @@ impl<'a> NpzViewMut<'a> {
 /// Mutable view of memory-mapped `.npy` files within an `.npz` file.
 ///
 /// Does **not** automatically [verify](`Self::verify`) the CRC-32 checksum but **does**
-/// [update](`Self::update`) it on [`Drop::drop`].
+/// [update](`Self::update`) it on [`Drop::drop`] if [`view_mut`](`Self::view_mut`) has been invoked
+/// and the checksum has not manually been updated by invoking [`update`](`Self::update`).
 #[derive(Debug)]
 pub struct NpyViewMut<'a> {
     crc32: &'a mut [u8],
     data: &'a mut [u8],
     central_crc32: &'a mut [u8],
+    status: ChecksumStatus,
 }
 
 impl<'a> NpyViewMut<'a> {
+    /// CRC-32 checksum status.
+    pub fn status(&self) -> ChecksumStatus {
+        self.status
+    }
     /// Verifies CRC-32 checksum by reading the whole array.
-    pub fn verify(&self) -> Result<(), ViewNpzError> {
+    ///
+    /// Changes checksum [`status`]([`Self::status()`]) to [`Outdated`](`ChecksumStatus::Outdated`)
+    /// if invalid or [`Correct`](`ChecksumStatus::Correct`) if valid.
+    pub fn verify(&mut self) -> Result<(), ViewNpzError> {
+        self.status = ChecksumStatus::Outdated;
         // Like the `zip` crate, verify only against central CRC-32.
-        Ok(crc32_verify(self.data, self.central_crc32)?)
+        crc32_verify(self.data, self.central_crc32)?;
+        self.status = ChecksumStatus::Correct;
+        Ok(())
+    }
+    /// Updates CRC-32 checksum by reading the whole array.
+    ///
+    /// Changes checksum [`status`]([`Self::status()`]) to [`Correct`](`ChecksumStatus::Correct`).
+    ///
+    /// Automatically updated on [`Drop::drop`] iff checksum [`status`]([`Self::status()`]) is
+    /// [`Outdated`](`ChecksumStatus::Outdated`).
+    pub fn update(&mut self) {
+        self.status = ChecksumStatus::Correct;
+        self.central_crc32.copy_from_slice(&crc32_update(self.data));
+        self.crc32.copy_from_slice(self.central_crc32);
     }
 
     /// Returns an immutable view of a memory-mapped `.npy` file.
@@ -946,30 +982,26 @@ impl<'a> NpyViewMut<'a> {
     {
         Ok(ArrayView::<A, D>::view_npy(self.data)?)
     }
-
     /// Returns a mutable view of a memory-mapped `.npy` file.
     ///
     /// Iterates over `bool` array to ensure `0x00`/`0x01` values.
+    ///
+    /// Changes checksum [`status`]([`Self::status()`]) to [`Outdated`](`ChecksumStatus::Outdated`).
     pub fn view_mut<A, D>(&mut self) -> Result<ArrayViewMut<A, D>, ViewNpzError>
     where
         A: ViewMutElement,
         D: Dimension,
     {
+        self.status = ChecksumStatus::Outdated;
         Ok(ArrayViewMut::<A, D>::view_mut_npy(self.data)?)
-    }
-
-    /// Updates CRC-32 checksum by reading the whole array.
-    ///
-    /// Automatically updated on [`Drop::drop`].
-    pub fn update(&mut self) {
-        self.central_crc32.copy_from_slice(&crc32_update(self.data));
-        self.crc32.copy_from_slice(self.central_crc32);
     }
 }
 
 impl<'a> Drop for NpyViewMut<'a> {
     fn drop(&mut self) {
-        self.update();
+        if self.status == ChecksumStatus::Outdated {
+            self.update();
+        }
     }
 }
 
@@ -988,4 +1020,21 @@ fn crc32_update(bytes: &[u8]) -> [u8; 4] {
     let mut hasher = crc32fast::Hasher::new();
     hasher.update(bytes);
     hasher.finalize().to_le_bytes()
+}
+
+/// Checksum status of an [`NpyView`] or [`NpyViewMut`].
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum ChecksumStatus {
+    /// The checksum has not been computed and the data has not changed.
+    Unverified,
+    /// The checksum is correct and the data has not changed.
+    Correct,
+    /// The data may have changed.
+    Outdated,
+}
+
+impl Default for ChecksumStatus {
+    fn default() -> Self {
+        Self::Unverified
+    }
 }
