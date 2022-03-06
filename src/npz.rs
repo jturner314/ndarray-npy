@@ -2,6 +2,7 @@ use crate::{
     ReadNpyError, ReadNpyExt, ReadableElement, ViewElement, ViewMutElement, ViewMutNpyExt,
     ViewNpyError, ViewNpyExt, WritableElement, WriteNpyError, WriteNpyExt,
 };
+use byteorder::{LittleEndian, ReadBytesExt};
 use ndarray::prelude::*;
 use ndarray::{Data, DataOwned};
 use std::collections::{BTreeMap, HashMap};
@@ -627,31 +628,40 @@ impl<'a> NpzViewMut<'a> {
             // Store file index by file names.
             let name = file.name().to_string();
             names.insert(name, index);
-            // Get local CRC-32 range.
-            let crc32: Option<Range<usize>> = file
-                .header_start()
+            // Wrap non-copy error in closure for lazy `ok_or_else(length_overflow)?`.
+            let length_overflow = || ZipError::InvalidArchive("Length overflow");
+            // Get data range.
+            let data: Range<usize> = file
+                .data_start()
                 .try_into()
                 .ok()
-                .and_then(|header_start: usize| header_start.checked_add(14))
-                .and_then(|crc32_start| {
-                    crc32_start
-                        .checked_add(4)
-                        .map(|crc32_end| crc32_start..crc32_end)
-                });
-            // Get data range.
-            let data: Option<Range<usize>> =
-                file.data_start()
-                    .try_into()
-                    .ok()
-                    .and_then(|data_start: usize| {
-                        file.size()
-                            .try_into()
-                            .ok()
-                            .and_then(|size: usize| data_start.checked_add(size))
-                            .map(|data_end| data_start..data_end)
-                    });
+                .and_then(|data_start: usize| {
+                    file.size()
+                        .try_into()
+                        .ok()
+                        .and_then(|size: usize| data_start.checked_add(size))
+                        .map(|data_end| data_start..data_end)
+                })
+                .ok_or_else(length_overflow)?;
+            // Get central general purpose bit flag range.
+            let central_flag: Range<usize> = file
+                .central_header_start()
+                .try_into()
+                .ok()
+                .and_then(|central_header_start: usize| central_header_start.checked_add(8))
+                .and_then(|central_flag_start| {
+                    central_flag_start
+                        .checked_add(2)
+                        .map(|central_flag_end| central_flag_start..central_flag_end)
+                })
+                .ok_or_else(length_overflow)?;
+            // Parse central general purpose bit flag range.
+            let central_flag: u16 = bytes
+                .get(central_flag.start..central_flag.end)
+                .and_then(|mut central_flag| central_flag.read_u16::<LittleEndian>().ok())
+                .ok_or_else(length_overflow)?;
             // Get central CRC-32 range.
-            let central_crc32: Option<Range<usize>> = file
+            let central_crc32: Range<usize> = file
                 .central_header_start()
                 .try_into()
                 .ok()
@@ -660,19 +670,67 @@ impl<'a> NpzViewMut<'a> {
                     central_crc32_start
                         .checked_add(4)
                         .map(|central_crc32_end| central_crc32_start..central_crc32_end)
-                });
-            if let (Some(crc32), Some(data), Some(central_crc32)) = (crc32, data, central_crc32) {
-                // Sort ranges by their starts.
-                splits.insert(crc32.start, crc32.end);
-                splits.insert(data.start, data.end);
-                splits.insert(central_crc32.start, central_crc32.end);
-                // Store ranges by file index.
-                ranges.insert(index, (crc32, data, central_crc32));
-                // Increment index of uncompressed and non-encrypted files.
-                index += 1;
+                })
+                .ok_or_else(length_overflow)?;
+            // Whether local CRC-32 is located in header or data descriptor.
+            let use_data_descriptor = central_flag & (1 << 3) != 0;
+            // Get local CRC-32 range.
+            let crc32: Range<usize> = if use_data_descriptor {
+                // Get local CRC-32 range in data descriptor.
+                let crc32_start = data.end;
+                let crc32: Range<usize> = crc32_start
+                    .checked_add(4)
+                    .map(|crc32_end| crc32_start..crc32_end)
+                    .ok_or_else(length_overflow)?;
+                // Parse local CRC-32.
+                let crc32_u32: u32 = bytes
+                    .get(crc32.start..crc32.end)
+                    .and_then(|mut crc32| crc32.read_u32::<LittleEndian>().ok())
+                    .ok_or_else(length_overflow)?;
+                // Whether local CRC-32 equals optional data descriptor signature.
+                if crc32_u32 == 0x08074b50 {
+                    // Parse central CRC-32.
+                    let central_crc32_u32: u32 = bytes
+                        .get(central_crc32.start..central_crc32.end)
+                        .and_then(|mut central_crc32| central_crc32.read_u32::<LittleEndian>().ok())
+                        .ok_or_else(length_overflow)?;
+                    // Whether CRC-32 coincides with data descriptor signature.
+                    if crc32_u32 == central_crc32_u32 {
+                        Err(ZipError::InvalidArchive(
+                            "Ambiguous CRC-32 location in data descriptor",
+                        ))?;
+                    }
+                    // Skip data descriptor signature.
+                    let crc32_start = crc32_start.checked_add(4).ok_or_else(length_overflow)?;
+                    // Get local CRC-32 range in data descriptor.
+                    crc32_start
+                        .checked_add(4)
+                        .map(|crc32_end| crc32_start..crc32_end)
+                        .ok_or_else(length_overflow)?
+                } else {
+                    crc32
+                }
             } else {
-                return Err(ZipError::InvalidArchive("Length overflow").into());
-            }
+                // Get local CRC-32 range in header.
+                file.header_start()
+                    .try_into()
+                    .ok()
+                    .and_then(|header_start: usize| header_start.checked_add(14))
+                    .and_then(|crc32_start| {
+                        crc32_start
+                            .checked_add(4)
+                            .map(|crc32_end| crc32_start..crc32_end)
+                    })
+                    .ok_or_else(length_overflow)?
+            };
+            // Sort ranges by their starts.
+            splits.insert(crc32.start, crc32.end);
+            splits.insert(data.start, data.end);
+            splits.insert(central_crc32.start, central_crc32.end);
+            // Store ranges by file index.
+            ranges.insert(index, (crc32, data, central_crc32));
+            // Increment index of uncompressed and non-encrypted files.
+            index += 1;
         }
         // Split and store borrows by their range starts.
         let mut offset = 0;
