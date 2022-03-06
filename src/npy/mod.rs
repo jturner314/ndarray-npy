@@ -220,6 +220,13 @@ impl From<io::Error> for WriteDataError {
 }
 
 /// An array element type that can be written to an `.npy` or `.npz` file.
+///
+/// # Safety
+///
+/// - The implementation must ensure that it is safe to read all bytes in the
+///   element. For example, this is violated if the element has padding bytes.
+/// - The implementation must ensure that it is safe to read all bytes in the
+///   slice. For example, this is violated if the element has padding bytes.
 pub unsafe trait WritableElement: Sized {
     /// Returns a descriptor of the type that can be used in the header.
     fn type_descriptor() -> PyValue;

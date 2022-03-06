@@ -414,7 +414,7 @@ impl<'a> NpzView<'a> {
             // Skip encrypted files.
             let file = match zip.by_index(zip_index) {
                 Err(ZipError::UnsupportedArchive(ZipError::PASSWORD_REQUIRED)) => continue,
-                Err(err) => Err(err)?,
+                Err(err) => return Err(err.into()),
                 Ok(file) => file,
             };
             // File name of non-encrypted file.
@@ -675,7 +675,7 @@ impl<'a> NpzViewMut<'a> {
             // Skip encrypted files.
             let file = match zip.by_index(zip_index) {
                 Err(ZipError::UnsupportedArchive(ZipError::PASSWORD_REQUIRED)) => continue,
-                Err(err) => Err(err)?,
+                Err(err) => return Err(err.into()),
                 Ok(file) => file,
             };
             // File name of non-encrypted file.
@@ -765,9 +765,10 @@ impl<'a> NpzViewMut<'a> {
                         .ok_or_else(length_overflow)?;
                     // Whether CRC-32 coincides with data descriptor signature.
                     if crc32_u32 == central_crc32_u32 {
-                        Err(ZipError::InvalidArchive(
+                        return Err(ZipError::InvalidArchive(
                             "Ambiguous CRC-32 location in data descriptor",
-                        ))?;
+                        )
+                        .into());
                     }
                     // Skip data descriptor signature.
                     let crc32_start = crc32_start.checked_add(4).ok_or_else(length_overflow)?;
@@ -961,8 +962,7 @@ impl<'a> NpyViewMut<'a> {
     ///
     /// Automatically updated on [`Drop::drop`].
     pub fn update(&mut self) {
-        self.central_crc32
-            .copy_from_slice(&crc32_update(&self.data));
+        self.central_crc32.copy_from_slice(&crc32_update(self.data));
         self.crc32.copy_from_slice(self.central_crc32);
     }
 }
