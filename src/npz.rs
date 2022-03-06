@@ -5,7 +5,7 @@ use crate::{
 use byteorder::{LittleEndian, ReadBytesExt};
 use ndarray::prelude::*;
 use ndarray::{Data, DataOwned};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
@@ -269,6 +269,12 @@ pub enum ViewNpzError {
     Npy(ViewNpyError),
     /// A mutable `.npy` file view has already been moved out of its `.npz` file view.
     MovedNpyViewMut,
+    /// Directories cannot be viewed.
+    Directory,
+    /// Compressed files cannot be viewed.
+    CompressedFile,
+    /// Encrypted files cannot be viewed.
+    EncryptedFile,
 }
 
 impl Error for ViewNpzError {
@@ -277,6 +283,9 @@ impl Error for ViewNpzError {
             ViewNpzError::Zip(err) => Some(err),
             ViewNpzError::Npy(err) => Some(err),
             ViewNpzError::MovedNpyViewMut => None,
+            ViewNpzError::Directory => None,
+            ViewNpzError::CompressedFile => None,
+            ViewNpzError::EncryptedFile => None,
         }
     }
 }
@@ -290,6 +299,9 @@ impl fmt::Display for ViewNpzError {
                 f,
                 "mutable npy file view already moved out of npz file view"
             ),
+            ViewNpzError::Directory => write!(f, "directories cannot be viewed"),
+            ViewNpzError::CompressedFile => write!(f, "compressed files cannot be viewed"),
+            ViewNpzError::EncryptedFile => write!(f, "encrypted files cannot be viewed"),
         }
     }
 }
@@ -330,7 +342,7 @@ impl From<ViewNpyError> for ViewNpzError {
 /// # Example
 ///
 /// This is an example of opening an immutably memory-mapped `.npz` archive as
-/// an [`NpzView`] providing an [`NpyView`] for each uncompressed and
+/// an [`NpzView`] providing an [`NpyView`] for each non-compressed and
 /// non-encrypted `.npy` file within the archive which can be accessed via
 /// [`NpyView::view`] as immutable [`ArrayView`].
 ///
@@ -346,7 +358,7 @@ impl From<ViewNpyError> for ViewNpzError {
 /// use ndarray_npy::{NpzView, ViewNpzError};
 /// use ndarray::Ix1;
 ///
-/// // Open `.npz` archive of uncompressed and non-encrypted `.npy` files in
+/// // Open `.npz` archive of non-compressed and non-encrypted `.npy` files in
 /// // native endian.
 /// #[cfg(target_endian = "little")]
 /// let file = OpenOptions::new().read(true)
@@ -357,7 +369,7 @@ impl From<ViewNpyError> for ViewNpzError {
 /// // Memory-map `.npz` archive of 64-byte aligned `.npy` files.
 /// let mmap = unsafe { MmapOptions::new().map(&file).unwrap() };
 /// let npz = NpzView::new(&mmap)?;
-/// // List uncompressed and non-encrypted files only.
+/// // List non-compressed and non-encrypted files only.
 /// for npy in npz.names() {
 ///     println!("{}", npy);
 /// }
@@ -379,6 +391,9 @@ impl From<ViewNpyError> for ViewNpzError {
 pub struct NpzView<'a> {
     files: HashMap<usize, NpyView<'a>>,
     names: HashMap<String, usize>,
+    directory_names: HashSet<String>,
+    compressed_names: HashSet<String>,
+    encrypted_names: HashSet<String>,
 }
 
 impl<'a> NpzView<'a> {
@@ -387,6 +402,13 @@ impl<'a> NpzView<'a> {
         let mut zip = ZipArchive::new(Cursor::new(bytes))?;
         let mut files = HashMap::new();
         let mut names = HashMap::new();
+        let mut directory_names = HashSet::new();
+        let mut compressed_names = HashSet::new();
+        // Initially assume all files to be encrypted.
+        let mut encrypted_names = zip
+            .file_names()
+            .map(From::from)
+            .collect::<HashSet<String>>();
         let mut index = 0;
         for zip_index in 0..zip.len() {
             // Skip encrypted files.
@@ -395,12 +417,20 @@ impl<'a> NpzView<'a> {
                 Err(err) => Err(err)?,
                 Ok(file) => file,
             };
+            // File name of non-encrypted file.
+            let name = file.name().to_string();
+            // Remove file name from encrypted files.
+            encrypted_names.remove(&name);
             // Skip directories and compressed files.
-            if file.is_dir() || file.compression() != CompressionMethod::Stored {
+            if file.is_dir() {
+                directory_names.insert(name);
+                continue;
+            }
+            if file.compression() != CompressionMethod::Stored {
+                compressed_names.insert(name);
                 continue;
             }
             // Store file index by file names.
-            let name = file.name().to_string();
             names.insert(name, index);
             // Get data slice.
             let data: Option<&[u8]> =
@@ -436,40 +466,67 @@ impl<'a> NpzView<'a> {
                         central_crc32,
                     },
                 );
-                // Increment index of uncompressed and non-encrypted files.
+                // Increment index of non-compressed and non-encrypted files.
                 index += 1;
             } else {
                 return Err(ZipError::InvalidArchive("Length overflow").into());
             }
         }
-        Ok(Self { files, names })
+        Ok(Self {
+            files,
+            names,
+            directory_names,
+            compressed_names,
+            encrypted_names,
+        })
     }
 
-    /// Returns `true` iff the `.npz` file doesn't contain any **uncompressed** and
-    /// **non-encrypted** arrays.
+    /// Returns `true` iff the `.npz` file doesn't contain any viewable arrays.
+    ///
+    /// Viewable arrays are neither directories, nor compressed, nor encrypted.
     pub fn is_empty(&self) -> bool {
         self.names.is_empty()
     }
 
-    /// Returns the number of **uncompressed** and **non-encrypted** arrays in the `.npz` file.
+    /// Returns the number of viewable arrays in the `.npz` file.
+    ///
+    /// Viewable arrays are neither directories, nor compressed, nor encrypted.
     pub fn len(&self) -> usize {
         self.names.len()
     }
 
-    /// Returns the names of all of the **uncompressed** and **non-encrypted** arrays in the `.npz`
-    /// file.
+    /// Returns the names of all of the viewable arrays in the `.npz` file.
+    ///
+    /// Viewable arrays are neither directories, nor compressed, nor encrypted.
     pub fn names(&self) -> impl Iterator<Item = &str> {
         self.names.keys().map(String::as_str)
+    }
+    /// Returns the names of all of the directories in the `.npz` file.
+    pub fn directory_names(&self) -> impl Iterator<Item = &str> {
+        self.directory_names.iter().map(String::as_str)
+    }
+    /// Returns the names of all of the compressed files in the `.npz` file.
+    pub fn compressed_names(&self) -> impl Iterator<Item = &str> {
+        self.compressed_names.iter().map(String::as_str)
+    }
+    /// Returns the names of all of the encrypted files in the `.npz` file.
+    pub fn encrypted_names(&self) -> impl Iterator<Item = &str> {
+        self.encrypted_names.iter().map(String::as_str)
     }
 
     /// Returns an immutable `.npy` file view by name.
     pub fn by_name(&self, name: &str) -> Result<NpyView<'a>, ViewNpzError> {
-        self.by_index(
-            self.names
-                .get(name)
-                .copied()
-                .ok_or(ZipError::FileNotFound)?,
-        )
+        self.by_index(self.names.get(name).copied().ok_or_else(|| {
+            if self.directory_names.get(name).is_some() {
+                ViewNpzError::Directory
+            } else if self.compressed_names.get(name).is_some() {
+                ViewNpzError::CompressedFile
+            } else if self.encrypted_names.get(name).is_some() {
+                ViewNpzError::EncryptedFile
+            } else {
+                ZipError::FileNotFound.into()
+            }
+        })?)
     }
 
     /// Returns an immutable `.npy` file view by index in `0..len()`.
@@ -538,7 +595,7 @@ impl<'a> NpyView<'a> {
 /// # Example
 ///
 /// This is an example of opening a mutably memory-mapped `.npz` archive as an
-/// [`NpzViewMut`] providing an [`NpyViewMut`] for each uncompressed and
+/// [`NpzViewMut`] providing an [`NpyViewMut`] for each non-compressed and
 /// non-encrypted `.npy` file within the archive which can be accessed via
 /// [`NpyViewMut::view`] as immutable [`ArrayView`] or via
 /// [`NpyViewMut::view_mut`] as mutable [`ArrayViewMut`]. Changes to the data in
@@ -558,7 +615,7 @@ impl<'a> NpyView<'a> {
 /// use ndarray_npy::{NpzViewMut, ViewNpzError};
 /// use ndarray::Ix1;
 ///
-/// // Open `.npz` archive of uncompressed and non-encrypted `.npy` files in
+/// // Open `.npz` archive of non-compressed and non-encrypted `.npy` files in
 /// // native endian.
 /// #[cfg(target_endian = "little")]
 /// let mut file = OpenOptions::new().read(true).write(true)
@@ -569,7 +626,7 @@ impl<'a> NpyView<'a> {
 /// // Memory-map `.npz` archive of 64-byte aligned `.npy` files.
 /// let mut mmap = unsafe { MmapOptions::new().map_mut(&file).unwrap() };
 /// let mut npz = NpzViewMut::new(&mut mmap)?;
-/// // List uncompressed and non-encrypted files only.
+/// // List non-compressed and non-encrypted files only.
 /// for npy in npz.names() {
 ///     println!("{}", npy);
 /// }
@@ -594,6 +651,9 @@ impl<'a> NpyView<'a> {
 pub struct NpzViewMut<'a> {
     files: HashMap<usize, NpyViewMut<'a>>,
     names: HashMap<String, usize>,
+    directory_names: HashSet<String>,
+    compressed_names: HashSet<String>,
+    encrypted_names: HashSet<String>,
 }
 
 impl<'a> NpzViewMut<'a> {
@@ -601,6 +661,13 @@ impl<'a> NpzViewMut<'a> {
     pub fn new(mut bytes: &'a mut [u8]) -> Result<Self, ViewNpzError> {
         let mut zip = ZipArchive::new(Cursor::new(&bytes))?;
         let mut names = HashMap::new();
+        let mut directory_names = HashSet::new();
+        let mut compressed_names = HashSet::new();
+        // Initially assume all files to be encrypted.
+        let mut encrypted_names = zip
+            .file_names()
+            .map(From::from)
+            .collect::<HashSet<String>>();
         let mut ranges = HashMap::new();
         let mut splits = BTreeMap::new();
         let mut index = 0;
@@ -611,12 +678,24 @@ impl<'a> NpzViewMut<'a> {
                 Err(err) => Err(err)?,
                 Ok(file) => file,
             };
+            // File name of non-encrypted file.
+            let name = file.name().to_string();
+            // Remove file name from encrypted files.
+            encrypted_names.remove(&name);
+            // Skip directories and compressed files.
+            if file.is_dir() {
+                directory_names.insert(name);
+                continue;
+            }
+            if file.compression() != CompressionMethod::Stored {
+                compressed_names.insert(name);
+                continue;
+            }
             // Skip directories and compressed files.
             if file.is_dir() || file.compression() != CompressionMethod::Stored {
                 continue;
             }
             // Store file index by file names.
-            let name = file.name().to_string();
             names.insert(name, index);
             // Wrap non-copy error in closure for lazy `ok_or_else(length_overflow)?`.
             let length_overflow = || ZipError::InvalidArchive("Length overflow");
@@ -719,7 +798,7 @@ impl<'a> NpzViewMut<'a> {
             splits.insert(central_crc32.start, central_crc32.end);
             // Store ranges by file index.
             ranges.insert(index, (crc32, data, central_crc32));
-            // Increment index of uncompressed and non-encrypted files.
+            // Increment index of non-compressed and non-encrypted files.
             index += 1;
         }
         // Split and store borrows by their range starts.
@@ -766,33 +845,61 @@ impl<'a> NpzViewMut<'a> {
                 return Err(ZipError::InvalidArchive("Ambiguous offsets").into());
             }
         }
-        Ok(Self { files, names })
+        Ok(Self {
+            files,
+            names,
+            directory_names,
+            compressed_names,
+            encrypted_names,
+        })
     }
 
-    /// Returns `true` iff the `.npz` file doesn't contain any **uncompressed** and
-    /// **non-encrypted** arrays.
+    /// Returns `true` iff the `.npz` file doesn't contain any viewable arrays.
+    ///
+    /// Viewable arrays are neither directories, nor compressed, nor encrypted.
     pub fn is_empty(&self) -> bool {
         self.names.is_empty()
     }
 
-    /// Returns the number of **uncompressed** and **non-encrypted** arrays in the `.npz` file.
+    /// Returns the number of viewable arrays in the `.npz` file.
+    ///
+    /// Viewable arrays are neither directories, nor compressed, nor encrypted.
     pub fn len(&self) -> usize {
         self.names.len()
     }
 
-    /// Returns the names of all of the **uncompressed** and **non-encrypted** arrays in the file.
+    /// Returns the names of all of the viewable arrays in the `.npz` file.
+    ///
+    /// Viewable arrays are neither directories, nor compressed, nor encrypted.
     pub fn names(&self) -> impl Iterator<Item = &str> {
         self.names.keys().map(String::as_str)
+    }
+    /// Returns the names of all of the directories in the `.npz` file.
+    pub fn directory_names(&self) -> impl Iterator<Item = &str> {
+        self.directory_names.iter().map(String::as_str)
+    }
+    /// Returns the names of all of the compressed files in the `.npz` file.
+    pub fn compressed_names(&self) -> impl Iterator<Item = &str> {
+        self.compressed_names.iter().map(String::as_str)
+    }
+    /// Returns the names of all of the encrypted files in the `.npz` file.
+    pub fn encrypted_names(&self) -> impl Iterator<Item = &str> {
+        self.encrypted_names.iter().map(String::as_str)
     }
 
     /// Moves a mutable `.npy` file view by name out of the `.npz` file view.
     pub fn by_name(&mut self, name: &str) -> Result<NpyViewMut<'a>, ViewNpzError> {
-        self.by_index(
-            self.names
-                .get(name)
-                .copied()
-                .ok_or(ZipError::FileNotFound)?,
-        )
+        self.by_index(self.names.get(name).copied().ok_or_else(|| {
+            if self.directory_names.get(name).is_some() {
+                ViewNpzError::Directory
+            } else if self.compressed_names.get(name).is_some() {
+                ViewNpzError::CompressedFile
+            } else if self.encrypted_names.get(name).is_some() {
+                ViewNpzError::EncryptedFile
+            } else {
+                ZipError::FileNotFound.into()
+            }
+        })?)
     }
 
     /// Moves a mutable `.npy` file view by index in `0..len()` out of the `.npz` file view.
