@@ -474,8 +474,8 @@ impl<'a> NpzView<'a> {
 
     /// Returns an immutable `.npy` file view by index in `0..len()`.
     ///
-    /// The index **does not** necessarily correspond to the index of the zip archive as compressed
-    /// and encrypted files are skipped.
+    /// The index **does not** necessarily correspond to the index of the zip archive as
+    /// directories, compressed files, and encrypted files are skipped.
     pub fn by_index(&self, index: usize) -> Result<NpyView<'a>, ViewNpzError> {
         self.files
             .get(&index)
@@ -797,8 +797,8 @@ impl<'a> NpzViewMut<'a> {
 
     /// Moves a mutable `.npy` file view by index in `0..len()` out of the `.npz` file view.
     ///
-    /// The index **does not** necessarily correspond to the index of the zip archive as compressed
-    /// and encrypted files are skipped.
+    /// The index **does not** necessarily correspond to the index of the zip archive as
+    /// directories, compressed files, and encrypted files are skipped.
     pub fn by_index(&mut self, index: usize) -> Result<NpyViewMut<'a>, ViewNpzError> {
         if index > self.names.len() {
             Err(ZipError::FileNotFound.into())
