@@ -5,6 +5,17 @@ b8 = np.array([True, False], dtype='bool')
 i8 = np.arange(10, dtype='int8')
 u8 = np.arange(10, dtype='uint8')
 
+np.save("b8.npy", b8)
+np.save("i8.npy", b8)
+np.save("u8.npy", b8)
+
+os.system('rm -f examples_data_descriptor.npz')
+os.system('zip -fdn npy examples_data_descriptor.npz b8.npy i8.npy u8.npy')
+
+os.system('rm b8.npy')
+os.system('rm i8.npy')
+os.system('rm u8.npy')
+
 np.savez("examples.npz",
     b8=b8,
     i8=i8,

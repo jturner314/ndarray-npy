@@ -557,16 +557,16 @@ impl<'a> NpyView<'a> {
     pub fn status(&self) -> ChecksumStatus {
         self.status
     }
-    /// Verifies CRC-32 checksum by reading the whole array.
+    /// Verifies and returns CRC-32 checksum by reading the whole array.
     ///
     /// Changes checksum [`status`](`Self::status()`) to [`Outdated`](`ChecksumStatus::Outdated`)
     /// if invalid or to [`Correct`](`ChecksumStatus::Correct`) if valid.
-    pub fn verify(&mut self) -> Result<(), ViewNpzError> {
+    pub fn verify(&mut self) -> Result<u32, ViewNpzError> {
         self.status = ChecksumStatus::Outdated;
         // Like the `zip` crate, verify only against central CRC-32.
         crc32_verify(self.data, self.central_crc32)?;
         self.status = ChecksumStatus::Correct;
-        Ok(())
+        Ok((&*self.central_crc32).read_u32::<LittleEndian>().unwrap())
     }
 
     /// Returns an immutable view of a memory-mapped `.npy` file.
@@ -949,27 +949,28 @@ impl<'a> NpyViewMut<'a> {
     pub fn status(&self) -> ChecksumStatus {
         self.status
     }
-    /// Verifies CRC-32 checksum by reading the whole array.
+    /// Verifies and returns CRC-32 checksum by reading the whole array.
     ///
     /// Changes checksum [`status`](`Self::status()`) to [`Outdated`](`ChecksumStatus::Outdated`)
     /// if invalid or to [`Correct`](`ChecksumStatus::Correct`) if valid.
-    pub fn verify(&mut self) -> Result<(), ViewNpzError> {
+    pub fn verify(&mut self) -> Result<u32, ViewNpzError> {
         self.status = ChecksumStatus::Outdated;
         // Like the `zip` crate, verify only against central CRC-32.
         crc32_verify(self.data, self.central_crc32)?;
         self.status = ChecksumStatus::Correct;
-        Ok(())
+        Ok((&*self.central_crc32).read_u32::<LittleEndian>().unwrap())
     }
-    /// Updates CRC-32 checksum by reading the whole array.
+    /// Updates and returns CRC-32 checksum by reading the whole array.
     ///
     /// Changes checksum [`status`](`Self::status()`) to [`Correct`](`ChecksumStatus::Correct`).
     ///
     /// Automatically updated on [`Drop::drop`] iff checksum [`status`](`Self::status()`) is
     /// [`Outdated`](`ChecksumStatus::Outdated`).
-    pub fn update(&mut self) {
+    pub fn update(&mut self) -> u32 {
         self.status = ChecksumStatus::Correct;
         self.central_crc32.copy_from_slice(&crc32_update(self.data));
         self.crc32.copy_from_slice(self.central_crc32);
+        (&*self.central_crc32).read_u32::<LittleEndian>().unwrap()
     }
 
     /// Returns an immutable view of a memory-mapped `.npy` file.
