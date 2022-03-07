@@ -560,7 +560,7 @@ impl<'a> NpyView<'a> {
     /// Verifies CRC-32 checksum by reading the whole array.
     ///
     /// Changes checksum [`status`](`Self::status()`) to [`Outdated`](`ChecksumStatus::Outdated`)
-    /// if invalid or [`Correct`](`ChecksumStatus::Correct`) if valid.
+    /// if invalid or to [`Correct`](`ChecksumStatus::Correct`) if valid.
     pub fn verify(&mut self) -> Result<(), ViewNpzError> {
         self.status = ChecksumStatus::Outdated;
         // Like the `zip` crate, verify only against central CRC-32.
@@ -952,7 +952,7 @@ impl<'a> NpyViewMut<'a> {
     /// Verifies CRC-32 checksum by reading the whole array.
     ///
     /// Changes checksum [`status`](`Self::status()`) to [`Outdated`](`ChecksumStatus::Outdated`)
-    /// if invalid or [`Correct`](`ChecksumStatus::Correct`) if valid.
+    /// if invalid or to [`Correct`](`ChecksumStatus::Correct`) if valid.
     pub fn verify(&mut self) -> Result<(), ViewNpzError> {
         self.status = ChecksumStatus::Outdated;
         // Like the `zip` crate, verify only against central CRC-32.
