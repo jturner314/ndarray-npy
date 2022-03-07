@@ -4,12 +4,12 @@ use crate::{file_to_aligned_bytes, file_to_aligned_mut_bytes, MaybeAlignedBytes}
 use ndarray::prelude::*;
 use ndarray::Slice;
 use ndarray_npy::{
-    write_zeroed_npy, ReadNpyError, ReadNpyExt, ViewMutNpyExt, ViewNpyError, ViewNpyExt,
-    WriteNpyExt,
+    write_zeroed_npy, NpzView, NpzViewMut, NpzWriter, ReadNpyError, ReadNpyExt, ViewMutNpyExt,
+    ViewNpyError, ViewNpyExt, WriteNpyExt,
 };
 use num_complex_0_4::Complex;
 use std::fs::{self, File};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::mem;
 
 #[test]
@@ -424,4 +424,32 @@ fn zeroed() {
     let arr = Array3::<i32>::read_npy(file).unwrap();
     assert_eq!(arr, Array3::<i32>::zeros(SHAPE));
     assert!(arr.is_standard_layout());
+}
+
+#[test]
+fn npz_view_mut() {
+    // In-memory buffer.
+    let mut buffer = Vec::<u8>::new();
+    // Create an `.npz` archive with zeroed `.npy` arrays.
+    {
+        let mut npz = NpzWriter::new(Cursor::new(&mut buffer));
+        npz.add_array("x.npy", &Array1::<f64>::zeros(5)).unwrap();
+    }
+    // Create mutable view of the `.npz` archive and modify array elements.
+    {
+        let mut npz = NpzViewMut::new(&mut buffer).unwrap();
+        let mut x_npy_view_mut = npz.by_name("x.npy").unwrap();
+        x_npy_view_mut.verify().unwrap();
+        let mut x_array_view_mut = x_npy_view_mut.view_mut::<f64, Ix1>().unwrap();
+        x_array_view_mut[3] = 38.0;
+        x_npy_view_mut.verify().unwrap_err();
+    }
+    // Create immutable view of the `.npz` archive and verify values and CRC-32 checksums.
+    {
+        let npz = NpzView::new(&buffer).unwrap();
+        let mut x_npy_view = npz.by_name("x.npy").unwrap();
+        x_npy_view.verify().unwrap();
+        let x_array_view = x_npy_view.view::<f64, Ix1>().unwrap();
+        assert_eq!(x_array_view, ArrayView1::from(&[0.0, 0.0, 0.0, 38.0, 0.0]));
+    }
 }
