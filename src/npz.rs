@@ -559,7 +559,7 @@ impl<'a> NpyView<'a> {
     }
     /// Verifies CRC-32 checksum by reading the whole array.
     ///
-    /// Changes checksum [`status`]([`Self::status()`]) to [`Outdated`](`ChecksumStatus::Outdated`)
+    /// Changes checksum [`status`](`Self::status()`) to [`Outdated`](`ChecksumStatus::Outdated`)
     /// if invalid or [`Correct`](`ChecksumStatus::Correct`) if valid.
     pub fn verify(&mut self) -> Result<(), ViewNpzError> {
         self.status = ChecksumStatus::Outdated;
@@ -951,7 +951,7 @@ impl<'a> NpyViewMut<'a> {
     }
     /// Verifies CRC-32 checksum by reading the whole array.
     ///
-    /// Changes checksum [`status`]([`Self::status()`]) to [`Outdated`](`ChecksumStatus::Outdated`)
+    /// Changes checksum [`status`](`Self::status()`) to [`Outdated`](`ChecksumStatus::Outdated`)
     /// if invalid or [`Correct`](`ChecksumStatus::Correct`) if valid.
     pub fn verify(&mut self) -> Result<(), ViewNpzError> {
         self.status = ChecksumStatus::Outdated;
@@ -962,9 +962,9 @@ impl<'a> NpyViewMut<'a> {
     }
     /// Updates CRC-32 checksum by reading the whole array.
     ///
-    /// Changes checksum [`status`]([`Self::status()`]) to [`Correct`](`ChecksumStatus::Correct`).
+    /// Changes checksum [`status`](`Self::status()`) to [`Correct`](`ChecksumStatus::Correct`).
     ///
-    /// Automatically updated on [`Drop::drop`] iff checksum [`status`]([`Self::status()`]) is
+    /// Automatically updated on [`Drop::drop`] iff checksum [`status`](`Self::status()`) is
     /// [`Outdated`](`ChecksumStatus::Outdated`).
     pub fn update(&mut self) {
         self.status = ChecksumStatus::Correct;
@@ -986,7 +986,7 @@ impl<'a> NpyViewMut<'a> {
     ///
     /// Iterates over `bool` array to ensure `0x00`/`0x01` values.
     ///
-    /// Changes checksum [`status`]([`Self::status()`]) to [`Outdated`](`ChecksumStatus::Outdated`).
+    /// Changes checksum [`status`](`Self::status()`) to [`Outdated`](`ChecksumStatus::Outdated`).
     pub fn view_mut<A, D>(&mut self) -> Result<ArrayViewMut<A, D>, ViewNpzError>
     where
         A: ViewMutElement,
