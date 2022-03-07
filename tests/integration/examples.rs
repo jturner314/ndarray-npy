@@ -428,6 +428,7 @@ fn zeroed() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore)] // avoid endless loop
 fn npz_view_mut() {
     // Signature of local header.
     let header = [0x50, 0x4b, 0x03, 0x04];
