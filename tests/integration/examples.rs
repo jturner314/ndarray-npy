@@ -1,7 +1,6 @@
 //! Miscellaneous example cases.
 
 use crate::{file_to_aligned_bytes, file_to_aligned_mut_bytes, MaybeAlignedBytes};
-use byteorder::{LittleEndian, ReadBytesExt};
 use ndarray::prelude::*;
 use ndarray::Slice;
 use ndarray_npy::{
@@ -9,6 +8,7 @@ use ndarray_npy::{
     ViewNpyError, ViewNpyExt, WriteNpyExt,
 };
 use num_complex_0_4::Complex;
+use std::convert::TryInto;
 use std::fs::{self, read, File};
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::mem;
@@ -436,15 +436,11 @@ fn npz_view_mut() {
     let data_descriptor = [0x50, 0x4b, 0x07, 0x08];
     // Parse local header CRC-32.
     let header_crc32 = |buffer: &[u8], offset: usize| {
-        (&buffer[offset + 14..offset + 18])
-            .read_u32::<LittleEndian>()
-            .unwrap()
+        u32::from_le_bytes((&buffer[offset + 14..offset + 18]).try_into().unwrap())
     };
     // Parse data descriptor CRC-32.
     let data_descriptor_crc32 = |buffer: &[u8], offset: usize| {
-        (&buffer[offset + 4..offset + 8])
-            .read_u32::<LittleEndian>()
-            .unwrap()
+        u32::from_le_bytes((&buffer[offset + 4..offset + 8]).try_into().unwrap())
     };
     // In-memory buffer.
     let mut buffer = Vec::<u8>::new();
