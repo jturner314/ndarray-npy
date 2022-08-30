@@ -168,7 +168,7 @@ macro_rules! impl_file_to_aligned_bytes {
                     bytes, ALIGN,
                 )))
             } else {
-                let out = Box::new($mmap(&file)?);
+                let out = Box::new($mmap(file)?);
                 assert_eq!(0, out.as_ptr() as usize % ALIGN);
                 Ok(out)
             }
