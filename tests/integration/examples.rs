@@ -1,5 +1,7 @@
 //! Miscellaneous example cases.
 
+#![cfg(feature = "num-complex-0_4")]
+
 use crate::{file_to_aligned_bytes, file_to_aligned_mut_bytes, MaybeAlignedBytes};
 use ndarray::prelude::*;
 use ndarray::Slice;

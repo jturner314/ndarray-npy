@@ -1,5 +1,7 @@
 //! Tests that read/viewed data match the original written data.
 
+#![cfg(feature = "num-complex-0_4")]
+
 use crate::MaybeAlignedBytes;
 use ndarray::array;
 use ndarray::prelude::*;
