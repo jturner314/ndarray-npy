@@ -103,6 +103,19 @@ impl<W: Write + Seek> NpzWriter<W> {
         }
     }
 
+    // TODO: it makes sense to add support for bzip2 also
+    // this necessitates some more generic API, as having three functions is janky... =)
+
+    /// Creates a new `.npz` file with zstd compression. While it is not directly supported by numpy,
+    /// it still could be useful (also it is possible to monkey-patch numpy to support it).
+    #[cfg(feature = "compressed_npz_zstd")]
+    pub fn new_zstd_compressed(writer: W, level: Option<i32>) -> NpzWriter<W> {
+        NpzWriter {
+            zip: ZipWriter::new(writer),
+            options: FileOptions::default().compression_method(CompressionMethod::ZSTD).compression_level(level),
+        }
+    }
+
     /// Adds an array with the specified `name` to the `.npz` file.
     ///
     /// Note that a `.npy` extension will be appended to `name`; this matches NumPy's behavior.
