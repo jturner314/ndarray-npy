@@ -24,7 +24,6 @@ zip = { version = "0.6.3", default-features = false, optional = true }
 default = ["compressed_npz", "num-complex-0_4"]
 npz = ["zip"]
 compressed_npz = ["npz", "zip/deflate"]
-compressed_npz_zstd = ["npz", "zip/zstd"]
 
 [dev-dependencies]
 memmap2 = "0.2"
