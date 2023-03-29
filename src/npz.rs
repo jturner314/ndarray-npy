@@ -103,6 +103,18 @@ impl<W: Write + Seek> NpzWriter<W> {
         }
     }
 
+    /// Creates a new `.npz` file with the specified options.
+    ///
+    /// This allows you to use a custom compression method, such as [`CompressionMethod::Zstd`] or set other options.
+    ///
+    /// Make sure to enable the `zstd` feature of the `zip` crate to use [`CompressionMethod::Zstd`] or other relevant features.
+    pub fn new_with_options(writer: W, options: FileOptions) -> NpzWriter<W> {
+        NpzWriter {
+            zip: ZipWriter::new(writer),
+            options,
+        }
+    }
+
     /// Adds an array with the specified `name` to the `.npz` file.
     ///
     /// To write a scalar value, create a zero-dimensional array using [`arr0`](ndarray::arr0) or
