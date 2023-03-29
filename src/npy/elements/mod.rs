@@ -161,7 +161,7 @@ macro_rules! impl_view_and_view_mut_always_valid_cast_multi_byte {
 /// `slice_as_bytes` with `$elem` as the type `T`.
 macro_rules! impl_writable_element_always_valid_cast {
     ($elem:ty, $little_desc:expr, $big_desc:expr) => {
-        unsafe impl $crate::WritableElement for $elem {
+        impl $crate::WritableElement for $elem {
             fn type_descriptor() -> ::py_literal::Value {
                 use std::convert::Into;
                 if cfg!(target_endian = "little") {

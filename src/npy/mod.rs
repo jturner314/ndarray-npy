@@ -220,7 +220,7 @@ impl From<io::Error> for WriteDataError {
 }
 
 /// An array element type that can be written to an `.npy` or `.npz` file.
-pub unsafe trait WritableElement: Sized {
+pub trait WritableElement: Sized {
     /// Returns a descriptor of the type that can be used in the header.
     fn type_descriptor() -> PyValue;
 
