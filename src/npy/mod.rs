@@ -11,7 +11,7 @@ use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
-use std::io::{self, BufWriter, Seek, SeekFrom};
+use std::io::{self, BufWriter, Seek};
 use std::mem;
 
 /// Read an `.npy` file located at the specified path.
@@ -174,7 +174,7 @@ where
         shape: dim.as_array_view().to_vec(),
     }
     .write(file)?;
-    let current_offset = file.seek(SeekFrom::Current(0))?;
+    let current_offset = file.stream_position()?;
     // First, truncate the file to the current offset.
     file.set_len(current_offset)?;
     // Then, zero-extend the length to represent the data (sparse if possible).
@@ -220,7 +220,7 @@ impl From<io::Error> for WriteDataError {
 }
 
 /// An array element type that can be written to an `.npy` or `.npz` file.
-pub unsafe trait WritableElement: Sized {
+pub trait WritableElement: Sized {
     /// Returns a descriptor of the type that can be used in the header.
     fn type_descriptor() -> PyValue;
 
