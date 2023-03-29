@@ -28,3 +28,7 @@ compressed_npz = ["npz", "zip/deflate"]
 [dev-dependencies]
 memmap2 = "0.2"
 tempfile = "3.2"
+
+[[example]]
+name = "simple_npz"
+required-features = ["npz"]
