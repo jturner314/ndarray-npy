@@ -9,7 +9,8 @@ description = ".npy and .npz file format support for ndarray"
 keywords = ["npy", "npz", "ndarray", "numpy", "array"]
 categories = ["parser-implementations", "encoding", "science"]
 readme = "README.md"
-edition = "2018"
+edition = "2021"
+rust-version = "1.56"
 
 [dependencies]
 byteorder = "1.3.2"
