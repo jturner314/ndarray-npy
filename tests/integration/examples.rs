@@ -6,13 +6,12 @@ use crate::{file_to_aligned_bytes, file_to_aligned_mut_bytes, MaybeAlignedBytes}
 use ndarray::prelude::*;
 use ndarray::Slice;
 use ndarray_npy::{
-    write_zeroed_npy, NpzView, NpzViewMut, NpzWriter, ReadNpyError, ReadNpyExt, ViewMutNpyExt,
-    ViewNpyError, ViewNpyExt, WriteNpyExt,
+    write_zeroed_npy, ReadNpyError, ReadNpyExt, ViewMutNpyExt, ViewNpyError, ViewNpyExt,
+    WriteNpyExt,
 };
 use num_complex_0_4::Complex;
-use std::convert::TryInto;
-use std::fs::{self, read, File};
-use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::fs::{self, File};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::mem;
 
 #[test]
@@ -430,8 +429,12 @@ fn zeroed() {
 }
 
 #[test]
-#[cfg_attr(miri, ignore)] // avoid endless loop
+#[cfg(feature = "npz")]
 fn npz_view_mut() {
+    use aligned_vec::AVec;
+    use ndarray_npy::{NpzView, NpzViewMut, NpzWriter};
+    use std::{fs::read, io::Cursor};
+
     // Signature of local header.
     let header = [0x50, 0x4b, 0x03, 0x04];
     // Optional signature of data descriptor.
@@ -453,6 +456,7 @@ fn npz_view_mut() {
         npz.add_array("y.npy", &Array1::<f64>::zeros(7)).unwrap();
         npz.add_array("z.npy", &Array1::<f64>::zeros(9)).unwrap();
     }
+    let mut buffer = AVec::<u8>::from_slice(64, &buffer);
     // Confirm all three example arrays have local headers.
     let offsets = find_subsequence(&buffer, &header);
     assert_eq!(&offsets, &[0, 232, 504]);
@@ -567,6 +571,7 @@ fn npz_view_mut() {
     }
 }
 
+#[cfg(feature = "npz")]
 fn find_subsequence<T>(haystack: &[T], needle: &[T]) -> Vec<usize>
 where
     for<'a> &'a [T]: PartialEq,
