@@ -105,11 +105,9 @@ impl<W: Write + Seek> NpzWriter<W> {
 
     /// Creates a new `.npz` file with the specified options.
     ///
-    /// This allows you to use a custom compression method, such as [`CompressionMethod::Zstd`] or
-    /// set other options.
+    /// This allows you to use a custom compression method, such as zstd, or set other options.
     ///
-    /// Make sure to enable the relevant features of the `zip` crate to use
-    /// [`CompressionMethod::Zstd`] or other features.
+    /// Make sure to enable the relevant features of the `zip` crate.
     pub fn new_with_options(writer: W, options: SimpleFileOptions) -> NpzWriter<W> {
         NpzWriter {
             zip: ZipWriter::new(writer),
