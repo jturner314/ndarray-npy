@@ -10,7 +10,7 @@ keywords = ["npy", "npz", "ndarray", "numpy", "array"]
 categories = ["parser-implementations", "encoding", "science"]
 readme = "README.md"
 edition = "2021"
-rust-version = "1.56"
+rust-version = "1.64"
 
 [dependencies]
 byteorder = "1.3.2"
