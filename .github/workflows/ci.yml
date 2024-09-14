@@ -94,7 +94,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - nightly
+          - stable
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
