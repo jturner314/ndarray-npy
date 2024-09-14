@@ -7,6 +7,7 @@ use ndarray_npy::{
     ReadNpyExt, ReadableElement, ViewElement, ViewMutElement, ViewMutNpyExt, ViewNpyExt,
     WritableElement, WriteNpyExt,
 };
+#[cfg(feature = "num-complex-0_4")]
 use num_complex_0_4::Complex;
 use std::fmt::Debug;
 use std::mem;
@@ -149,6 +150,7 @@ fn round_trip_f64() {
     );
 }
 
+#[cfg(feature = "num-complex-0_4")]
 #[test]
 fn round_trip_c32() {
     test_round_trip_multiple_layouts(

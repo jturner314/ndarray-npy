@@ -7,6 +7,7 @@ use ndarray_npy::{
     write_zeroed_npy, ReadNpyError, ReadNpyExt, ViewMutNpyExt, ViewNpyError, ViewNpyExt,
     WriteNpyExt,
 };
+#[cfg(feature = "num-complex-0_4")]
 use num_complex_0_4::Complex;
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -29,6 +30,7 @@ fn write_f64_standard() {
     assert_eq!(&correct, &writer);
 }
 
+#[cfg(feature = "num-complex-0_4")]
 #[test]
 fn write_c64_standard() {
     #[cfg(target_endian = "little")]
@@ -65,6 +67,7 @@ fn write_f64_fortran() {
     assert_eq!(&correct[..], &writer[..]);
 }
 
+#[cfg(feature = "num-complex-0_4")]
 #[test]
 fn write_c64_fortran() {
     #[cfg(target_endian = "little")]
@@ -103,6 +106,7 @@ fn write_f64_discontiguous() {
     assert_eq!(&correct, &writer);
 }
 
+#[cfg(feature = "num-complex-0_4")]
 #[test]
 fn write_c64_discontiguous() {
     #[cfg(target_endian = "little")]
@@ -141,6 +145,7 @@ fn read_f64_standard() {
     }
 }
 
+#[cfg(feature = "num-complex-0_4")]
 #[test]
 fn read_c64_standard() {
     let mut correct = Array3::<Complex<f64>>::zeros((2, 3, 4));
@@ -175,6 +180,7 @@ fn read_f64_fortran() {
     }
 }
 
+#[cfg(feature = "num-complex-0_4")]
 #[test]
 fn read_c64_fortran() {
     let mut correct = Array3::<Complex<f64>>::zeros((2, 3, 4).f());
@@ -230,6 +236,7 @@ fn view_f64_standard() {
     assert!(view.is_standard_layout());
 }
 
+#[cfg(feature = "num-complex-0_4")]
 #[test]
 fn view_c64_standard() {
     #[cfg(target_endian = "little")]
@@ -266,6 +273,7 @@ fn view_f64_fortran() {
     assert!(view.t().is_standard_layout());
 }
 
+#[cfg(feature = "num-complex-0_4")]
 #[test]
 fn view_c64_fortran() {
     #[cfg(target_endian = "little")]
