@@ -6,6 +6,8 @@ use std::io::{self, Read};
 use std::ops::{Deref, DerefMut};
 
 mod examples;
+#[cfg(feature = "npz")]
+mod npz;
 mod primitive;
 mod round_trip;
 
