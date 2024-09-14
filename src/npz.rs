@@ -7,7 +7,7 @@ use std::error::Error;
 use std::fmt;
 use std::io::{BufWriter, Read, Seek, Write};
 use zip::result::ZipError;
-use zip::write::FileOptions;
+use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 /// An error writing a `.npz` file.
@@ -78,7 +78,7 @@ impl From<WriteNpyError> for WriteNpzError {
 /// ```
 pub struct NpzWriter<W: Write + Seek> {
     zip: ZipWriter<W>,
-    options: FileOptions,
+    options: SimpleFileOptions,
 }
 
 impl<W: Write + Seek> NpzWriter<W> {
@@ -88,7 +88,7 @@ impl<W: Write + Seek> NpzWriter<W> {
     pub fn new(writer: W) -> NpzWriter<W> {
         NpzWriter {
             zip: ZipWriter::new(writer),
-            options: FileOptions::default().compression_method(CompressionMethod::Stored),
+            options: SimpleFileOptions::default().compression_method(CompressionMethod::Stored),
         }
     }
 
@@ -99,16 +99,18 @@ impl<W: Write + Seek> NpzWriter<W> {
     pub fn new_compressed(writer: W) -> NpzWriter<W> {
         NpzWriter {
             zip: ZipWriter::new(writer),
-            options: FileOptions::default().compression_method(CompressionMethod::Deflated),
+            options: SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
         }
     }
 
     /// Creates a new `.npz` file with the specified options.
     ///
-    /// This allows you to use a custom compression method, such as [`CompressionMethod::Zstd`] or set other options.
+    /// This allows you to use a custom compression method, such as [`CompressionMethod::Zstd`] or
+    /// set other options.
     ///
-    /// Make sure to enable the `zstd` feature of the `zip` crate to use [`CompressionMethod::Zstd`] or other relevant features.
-    pub fn new_with_options(writer: W, options: FileOptions) -> NpzWriter<W> {
+    /// Make sure to enable the relevant features of the `zip` crate to use
+    /// [`CompressionMethod::Zstd`] or other features.
+    pub fn new_with_options(writer: W, options: SimpleFileOptions) -> NpzWriter<W> {
         NpzWriter {
             zip: ZipWriter::new(writer),
             options,
@@ -152,7 +154,7 @@ impl<W: Write + Seek> NpzWriter<W> {
     /// [`BufWriter`](std::io::BufWriter)) flush the writer, any errors that
     /// occur during drop will be silently ignored. So, it's necessary to call
     /// `.finish()` to properly handle errors.
-    pub fn finish(mut self) -> Result<W, WriteNpzError> {
+    pub fn finish(self) -> Result<W, WriteNpzError> {
         let mut writer = self.zip.finish()?;
         writer.flush().map_err(ZipError::from)?;
         Ok(writer)
