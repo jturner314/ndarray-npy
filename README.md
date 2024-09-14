@@ -37,7 +37,7 @@ To use with the default features:
 
 ```toml
 [dependencies]
-ndarray-npy = "0.8.1"
+ndarray-npy = "0.9"
 ```
 
 The `default` feature set includes the `compressed_npz` feature, which enables
@@ -53,7 +53,7 @@ To use without the default features:
 
 ```toml
 [dependencies]
-ndarray-npy = { version = "0.8.1", default-features = false }
+ndarray-npy = { version = "0.9", default-features = false }
 ```
 
 With `default-features = false`, `ndarray-npy` provides support only for `.npy`
@@ -73,7 +73,7 @@ For example, you can use just the `npz` feature:
 
 ```toml
 [dependencies.ndarray-npy]
-version = "0.8.1"
+version = "0.9"
 default-features = false
 features = ["npz"]
 ```
@@ -86,7 +86,7 @@ Library authors should specify their dependency on `ndarray-npy` like this:
 
 ```toml
 [dependencies.ndarray-npy]
-version = "0.8.1"
+version = "0.9"
 default-features = false
 features = [FEATURES_LIST_HERE]
 ```
@@ -114,7 +114,7 @@ be especially appreciated.
 
 ## License
 
-Copyright 2018–2021 Jim Turner and `ndarray-npy` developers
+Copyright 2018–2024 Jim Turner and `ndarray-npy` developers
 
 Licensed under the [Apache License, Version 2.0](LICENSE-APACHE), or the [MIT
 license](LICENSE-MIT), at your option. You may not use this project except in

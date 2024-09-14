@@ -1,3 +1,26 @@
+# 0.9.0
+
+## Breaking Changes
+
+* Updated to `ndarray` 0.16.
+* Updated to `zip` 2.
+* Updated minimum Rust version to 1.64.
+* Removed `unsafe` from `WritableElement` trait declaration.
+* Altered the behavior regarding `.npy` extensions of the file names within
+  `.npz` archives to match NumPy's behavior, by @jturner314. See
+  [#76](https://github.com/jturner314/ndarray-npy/pull/76). Specifically,
+  - `NpzWriter::add_array()` now appends `.npy` to the name.
+  - `NpzReader::names()` now strips a single `.npy` (if present) from the end
+    of each name.
+  - `NpzReader::by_name()` now tries `{name}.npy` if `{name}` is not present in
+    the archive.
+
+## New Features
+
+* Added `NpzWriter::new_with_options()`, which allows for different compression
+  options, etc., when writing `.npz` files. By @DCNick3. See
+  [#66](https://github.com/jturner314/ndarray-npy/pull/66) for the motivation.
+
 # 0.8.1
 
 * Added support for complex floating point element types with the new
