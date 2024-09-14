@@ -26,7 +26,7 @@ npz = ["zip"]
 compressed_npz = ["npz", "zip/deflate"]
 
 [dev-dependencies]
-memmap2 = "0.2"
+memmap2 = "0.9"
 tempfile = "3.2"
 
 [[example]]
