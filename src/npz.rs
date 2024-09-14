@@ -105,6 +105,8 @@ impl<W: Write + Seek> NpzWriter<W> {
 
     /// Adds an array with the specified `name` to the `.npz` file.
     ///
+    /// Note that a `.npy` extension will be appended to `name`; this matches NumPy's behavior.
+    ///
     /// To write a scalar value, create a zero-dimensional array using [`arr0`](ndarray::arr0) or
     /// [`aview0`](ndarray::aview0).
     pub fn add_array<N, S, D>(
@@ -118,7 +120,7 @@ impl<W: Write + Seek> NpzWriter<W> {
         S: Data,
         D: Dimension,
     {
-        self.zip.start_file(name, self.options)?;
+        self.zip.start_file(name.into() + ".npy", self.options)?;
         // Buffering when writing individual arrays is beneficial even when the
         // underlying writer is `Cursor<Vec<u8>>` instead of a real file. The
         // only exception I saw in testing was the "compressed, in-memory
@@ -221,20 +223,40 @@ impl<R: Read + Seek> NpzReader<R> {
     }
 
     /// Returns the names of all of the arrays in the file.
+    ///
+    /// Note that a single ".npy" suffix (if present) will be stripped from each name; this matches
+    /// NumPy's behavior.
     pub fn names(&mut self) -> Result<Vec<String>, ReadNpzError> {
         Ok((0..self.zip.len())
-            .map(|i| Ok(self.zip.by_index(i)?.name().to_owned()))
+            .map(|i| {
+                let file = self.zip.by_index(i)?;
+                let name = file.name();
+                let stripped = name.strip_suffix(".npy").unwrap_or(name);
+                Ok(stripped.to_owned())
+            })
             .collect::<Result<_, ZipError>>()?)
     }
 
     /// Reads an array by name.
+    ///
+    /// Note that this first checks for `name` in the `.npz` file, and if that is not present,
+    /// checks for `format!("{name}.npy")`. This matches NumPy's behavior.
     pub fn by_name<S, D>(&mut self, name: &str) -> Result<ArrayBase<S, D>, ReadNpzError>
     where
         S::Elem: ReadableElement,
         S: DataOwned,
         D: Dimension,
     {
-        Ok(ArrayBase::<S, D>::read_npy(self.zip.by_name(name)?)?)
+        // TODO: Combine the two cases into a single `let file = match { ... }` once
+        // https://github.com/rust-lang/rust/issues/47680 is resolved.
+        match self.zip.by_name(name) {
+            Ok(file) => return Ok(ArrayBase::<S, D>::read_npy(file)?),
+            Err(ZipError::FileNotFound) => {}
+            Err(err) => return Err(err.into()),
+        };
+        Ok(ArrayBase::<S, D>::read_npy(
+            self.zip.by_name(&format!("{name}.npy"))?,
+        )?)
     }
 
     /// Reads an array by index in the `.npz` file.
