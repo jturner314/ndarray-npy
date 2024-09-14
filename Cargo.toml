@@ -1,6 +1,6 @@
 [package]
 name = "ndarray-npy"
-version = "0.9.0"
+version = "0.9.1"
 authors = ["Jim Turner <ndarray-npy@turner.link>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/jturner314/ndarray-npy"

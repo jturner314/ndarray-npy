@@ -1,3 +1,7 @@
+# 0.9.1
+
+* Removed broken links from docs.
+
 # 0.9.0
 
 ## Breaking Changes
