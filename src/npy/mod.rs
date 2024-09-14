@@ -924,11 +924,11 @@ pub trait ViewMutElement: Sized {
 /// overflow `isize`.
 fn shape_length_checked<T>(shape: &IxDyn) -> Option<usize> {
     let len = shape.size_checked()?;
-    if len > std::isize::MAX as usize {
+    if len > isize::MAX as usize {
         return None;
     }
     let bytes = len.checked_mul(mem::size_of::<T>())?;
-    if bytes > std::isize::MAX as usize {
+    if bytes > isize::MAX as usize {
         return None;
     }
     Some(len)
