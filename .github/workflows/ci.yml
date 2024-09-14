@@ -121,20 +121,15 @@ jobs:
 
   coverage:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        rust:
-          - nightly
+    container:
+      image: xd009642/tarpaulin:develop-nightly
+      options: --security-opt seccomp=unconfined
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust }}
-      - name: Install tarpaulin
-        run: cargo install cargo-tarpaulin -f
+      - name: Checkout repository
+        uses: actions/checkout@v4
       - name: Generate code coverage
-        run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out Xml
+        run: cargo +nightly tarpaulin --verbose --all-features --workspace --timeout 120 --out xml
       - name: Upload to codecov.io
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v2
         with:
           fail_ci_if_error: true
