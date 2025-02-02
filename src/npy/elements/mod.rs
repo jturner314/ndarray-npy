@@ -199,4 +199,4 @@ macro_rules! impl_writable_element_always_valid_cast {
 mod bool;
 #[cfg(feature = "num-complex-0_4")]
 mod complex;
-mod primitive;
+mod num;
