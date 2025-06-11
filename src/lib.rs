@@ -48,7 +48,7 @@
 //!
 //! [header dictionary]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.lib.format.html#format-version-1-0
 
-mod npy;
+pub mod npy;
 #[cfg(feature = "npz")]
 mod npz;
 
