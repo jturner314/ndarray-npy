@@ -32,3 +32,7 @@ tempfile = "3.2"
 [[example]]
 name = "simple_npz"
 required-features = ["npz"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

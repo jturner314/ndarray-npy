@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 //! This crate provides methods to read/write [`ndarray`]'s
 //! [`ArrayBase`](ndarray::ArrayBase) type from/to [`.npy`] and [`.npz`] files.
 //!
