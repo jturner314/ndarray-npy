@@ -691,11 +691,19 @@ impl From<ViewDataError> for ViewNpyError {
 ///   implementation iterates over all of the elements when creating the view
 ///   to ensure they have a valid bit pattern.
 ///
-/// - The data in the buffer must be properly aligned for the element type.
-///   Typically, this should not be a concern for memory-mapped files (unless
-///   an option like `MAP_FIXED` is used), since memory mappings are usually
-///   aligned to a page boundary, and the `.npy` format has padding such that
-///   the header size is a multiple of 64 bytes.
+/// - Viewing an `.npy` file has more restrictions than reading it, due to
+///   memory layout. Specifically:
+///
+///   - An error is returned if the data in the buffer is not properly aligned
+///     for the element type. Typically, this should not be a concern for
+///     memory-mapped files (unless an option like `MAP_FIXED` is used), since
+///     memory mappings are usually aligned to a page boundary, and the `.npy`
+///     format has padding such that the header size is a multiple of 64 bytes.
+///
+///   - An error is returned if the endianness of the data does not match the
+///     endianness of the target element type. For example, multi-byte
+///     primitive types such as `f32` require that the data in the file match
+///     the native endianness of the machine.
 ///
 /// # Example
 ///
@@ -740,11 +748,19 @@ pub trait ViewNpyExt<'a>: Sized {
 ///   implementation iterates over all of the elements when creating the view
 ///   to ensure they have a valid bit pattern.
 ///
-/// - The data in the buffer must be properly aligned for the element type.
-///   Typically, this should not be a concern for memory-mapped files (unless
-///   an option like `MAP_FIXED` is used), since memory mappings are usually
-///   aligned to a page boundary, and the `.npy` format has padding such that
-///   the header size is a multiple of 64 bytes.
+/// - Viewing an `.npy` file has more restrictions than reading it, due to
+///   memory layout. Specifically:
+///
+///   - An error is returned if the data in the buffer is not properly aligned
+///     for the element type. Typically, this should not be a concern for
+///     memory-mapped files (unless an option like `MAP_FIXED` is used), since
+///     memory mappings are usually aligned to a page boundary, and the `.npy`
+///     format has padding such that the header size is a multiple of 64 bytes.
+///
+///   - An error is returned if the endianness of the data does not match the
+///     endianness of the target element type. For example, multi-byte
+///     primitive types such as `f32` require that the data in the file match
+///     the native endianness of the machine.
 ///
 /// # Example
 ///
