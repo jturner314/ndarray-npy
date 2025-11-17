@@ -7,7 +7,7 @@ use std::error::Error;
 use std::fmt;
 use std::io::{BufWriter, Read, Seek, Write};
 use zip::result::ZipError;
-use zip::write::SimpleFileOptions;
+use zip::write::{FileOptionExtension, FileOptions, SimpleFileOptions};
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 /// An error writing a `.npz` file.
@@ -92,7 +92,11 @@ impl<W: Write + Seek> NpzWriter<W> {
         }
     }
 
-    /// Creates a new `.npz` file with compression. See [`numpy.savez_compressed`].
+    /// Creates a new `.npz` file with [`Deflated`](CompressionMethod::Deflated) compression. See
+    /// [`numpy.savez_compressed`].
+    ///
+    /// For other compression algorithms, use [`NpzWriter::new_with_options`] or
+    /// [`NpzWriter::add_array_with_options`].
     ///
     /// [`numpy.savez_compressed`]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.savez_compressed.html
     #[cfg(feature = "compressed_npz")]
@@ -103,7 +107,7 @@ impl<W: Write + Seek> NpzWriter<W> {
         }
     }
 
-    /// Creates a new `.npz` file with the specified options.
+    /// Creates a new `.npz` file with the specified options to be used for each array.
     ///
     /// This allows you to use a custom compression method, such as zstd, or set other options.
     ///
@@ -116,6 +120,8 @@ impl<W: Write + Seek> NpzWriter<W> {
     }
 
     /// Adds an array with the specified `name` to the `.npz` file.
+    ///
+    /// This uses the file options passed to the `NpzWriter` constructor.
     ///
     /// Note that a `.npy` extension will be appended to `name`; this matches NumPy's behavior.
     ///
@@ -132,7 +138,31 @@ impl<W: Write + Seek> NpzWriter<W> {
         S: Data,
         D: Dimension,
     {
-        self.zip.start_file(name.into() + ".npy", self.options)?;
+        self.add_array_with_options(name, array, self.options)
+    }
+
+    /// Adds an array with the specified `name` and options to the `.npz` file.
+    ///
+    /// The specified options override those passed to the [`NpzWriter`] constructor (if any).
+    ///
+    /// Note that a `.npy` extension will be appended to `name`; this matches NumPy's behavior.
+    ///
+    /// To write a scalar value, create a zero-dimensional array using [`arr0`](ndarray::arr0) or
+    /// [`aview0`](ndarray::aview0).
+    pub fn add_array_with_options<N, S, D, T>(
+        &mut self,
+        name: N,
+        array: &ArrayBase<S, D>,
+        options: FileOptions<'_, T>,
+    ) -> Result<(), WriteNpzError>
+    where
+        N: Into<String>,
+        S::Elem: WritableElement,
+        S: Data,
+        D: Dimension,
+        T: FileOptionExtension,
+    {
+        self.zip.start_file(name.into() + ".npy", options)?;
         // Buffering when writing individual arrays is beneficial even when the
         // underlying writer is `Cursor<Vec<u8>>` instead of a real file. The
         // only exception I saw in testing was the "compressed, in-memory
