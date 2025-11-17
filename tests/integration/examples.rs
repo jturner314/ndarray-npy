@@ -13,6 +13,13 @@ use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::mem;
 
+#[track_caller]
+fn assert_written_is_correct<T: WriteNpyExt + ?Sized>(arr: &T, correct: &[u8]) {
+    let mut writer = Vec::<u8>::new();
+    arr.write_npy(&mut writer).unwrap();
+    assert_eq!(&correct, &writer);
+}
+
 #[test]
 fn write_f64_standard() {
     #[cfg(target_endian = "little")]
@@ -21,13 +28,13 @@ fn write_f64_standard() {
     let path = "resources/example_f64_big_endian_standard.npy";
 
     let correct = fs::read(path).unwrap();
-    let mut writer = Vec::<u8>::new();
     let mut arr = Array3::<f64>::zeros((2, 3, 4));
     for (i, elem) in arr.iter_mut().enumerate() {
         *elem = i as f64;
     }
-    arr.write_npy(&mut writer).unwrap();
-    assert_eq!(&correct, &writer);
+    assert_written_is_correct(&arr, &correct);
+    let arr_ref: &ArrayRef3<f64> = &*arr;
+    assert_written_is_correct(arr_ref, &correct);
 }
 
 #[cfg(feature = "num-complex-0_4")]
@@ -39,15 +46,15 @@ fn write_c64_standard() {
     let path = "resources/example_c64_big_endian_standard.npy";
 
     let correct = fs::read(path).unwrap();
-    let mut writer = Vec::<u8>::new();
     let mut arr = Array3::<Complex<f64>>::zeros((2, 3, 4));
     for (i, elem) in arr.iter_mut().enumerate() {
         // The `+ 0.` is necessary to get the same behavior as Python with
         // respect to signed zeros.
         *elem = Complex::new(i as f64, -(i as f64) + 0.);
     }
-    arr.write_npy(&mut writer).unwrap();
-    assert_eq!(&correct, &writer);
+    assert_written_is_correct(&arr, &correct);
+    let arr_ref: &ArrayRef3<Complex<f64>> = &*arr;
+    assert_written_is_correct(arr_ref, &correct);
 }
 
 #[test]
@@ -58,13 +65,13 @@ fn write_f64_fortran() {
     let path = "resources/example_f64_big_endian_fortran.npy";
 
     let correct = fs::read(path).unwrap();
-    let mut writer = Vec::<u8>::new();
     let mut arr = Array3::<f64>::zeros((2, 3, 4).f());
     for (i, elem) in arr.iter_mut().enumerate() {
         *elem = i as f64;
     }
-    arr.write_npy(&mut writer).unwrap();
-    assert_eq!(&correct[..], &writer[..]);
+    assert_written_is_correct(&arr, &correct);
+    let arr_ref: &ArrayRef3<f64> = &*arr;
+    assert_written_is_correct(arr_ref, &correct);
 }
 
 #[cfg(feature = "num-complex-0_4")]
@@ -76,15 +83,15 @@ fn write_c64_fortran() {
     let path = "resources/example_c64_big_endian_fortran.npy";
 
     let correct = fs::read(path).unwrap();
-    let mut writer = Vec::<u8>::new();
     let mut arr = Array3::<Complex<f64>>::zeros((2, 3, 4).f());
     for (i, elem) in arr.iter_mut().enumerate() {
         // The `+ 0.` is necessary to get the same behavior as Python with
         // respect to signed zeros.
         *elem = Complex::new(i as f64, -(i as f64) + 0.);
     }
-    arr.write_npy(&mut writer).unwrap();
-    assert_eq!(&correct[..], &writer[..]);
+    assert_written_is_correct(&arr, &correct);
+    let arr_ref: &ArrayRef3<Complex<f64>> = &*arr;
+    assert_written_is_correct(arr_ref, &correct);
 }
 
 #[test]
@@ -95,15 +102,15 @@ fn write_f64_discontiguous() {
     let path = "resources/example_f64_big_endian_standard.npy";
 
     let correct = fs::read(path).unwrap();
-    let mut writer = Vec::<u8>::new();
     let mut arr = Array3::<f64>::zeros((3, 4, 4));
     arr.slice_axis_inplace(Axis(1), Slice::new(0, None, 2));
     arr.swap_axes(0, 1);
     for (i, elem) in arr.iter_mut().enumerate() {
         *elem = i as f64;
     }
-    arr.write_npy(&mut writer).unwrap();
-    assert_eq!(&correct, &writer);
+    assert_written_is_correct(&arr, &correct);
+    let arr_ref: &ArrayRef3<f64> = &*arr;
+    assert_written_is_correct(arr_ref, &correct);
 }
 
 #[cfg(feature = "num-complex-0_4")]
@@ -115,7 +122,6 @@ fn write_c64_discontiguous() {
     let path = "resources/example_c64_big_endian_standard.npy";
 
     let correct = fs::read(path).unwrap();
-    let mut writer = Vec::<u8>::new();
     let mut arr = Array3::<Complex<f64>>::zeros((3, 4, 4));
     arr.slice_axis_inplace(Axis(1), Slice::new(0, None, 2));
     arr.swap_axes(0, 1);
@@ -124,8 +130,9 @@ fn write_c64_discontiguous() {
         // respect to signed zeros.
         *elem = Complex::new(i as f64, -(i as f64) + 0.);
     }
-    arr.write_npy(&mut writer).unwrap();
-    assert_eq!(&correct, &writer);
+    assert_written_is_correct(&arr, &correct);
+    let arr_ref: &ArrayRef3<Complex<f64>> = &*arr;
+    assert_written_is_correct(arr_ref, &correct);
 }
 
 #[test]
