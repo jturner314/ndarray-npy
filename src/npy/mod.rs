@@ -716,7 +716,8 @@ impl From<ViewDataError> for ViewNpyError {
 /// use the memory-mapping crate you're most comfortable with.
 ///
 /// ```
-/// # if !cfg!(miri) { // Miri doesn't support mmap.
+/// # // Miri doesn't support mmap, and the file is in little endian format.
+/// # if !cfg!(miri) && cfg!(target_endian = "little") {
 /// use memmap2::Mmap;
 /// use ndarray::ArrayView2;
 /// use ndarray_npy::ViewNpyExt;
@@ -774,7 +775,8 @@ pub trait ViewNpyExt<'a>: Sized {
 /// you can use the memory-mapping crate you're most comfortable with.
 ///
 /// ```
-/// # if !cfg!(miri) { // Miri doesn't support mmap.
+/// # // Miri doesn't support mmap, and the file is in little endian format.
+/// # if !cfg!(miri) && cfg!(target_endian = "little") {
 /// use memmap2::MmapMut;
 /// use ndarray::ArrayViewMut2;
 /// use ndarray_npy::ViewMutNpyExt;
