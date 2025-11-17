@@ -316,10 +316,26 @@ impl From<FormatHeaderError> for WriteHeaderError {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum Layout {
+    /// Standard layout (C order).
+    Standard,
+    /// Fortran layout.
+    Fortran,
+}
+
+impl Layout {
+    /// Returns `true` if the layout is [`Fortran`](Self::Fortran).
+    #[inline]
+    pub fn is_fortran(&self) -> bool {
+        matches!(*self, Layout::Fortran)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Header {
     pub type_descriptor: PyValue,
-    pub fortran_order: bool,
+    pub layout: Layout,
     pub shape: Vec<usize>,
 }
 
@@ -333,7 +349,7 @@ impl Header {
     fn from_py_value(value: PyValue) -> Result<Self, ParseHeaderError> {
         if let PyValue::Dict(dict) = value {
             let mut type_descriptor: Option<PyValue> = None;
-            let mut fortran_order: Option<bool> = None;
+            let mut is_fortran: Option<bool> = None;
             let mut shape: Option<Vec<usize>> = None;
             for (key, value) in dict {
                 match key {
@@ -342,7 +358,7 @@ impl Header {
                     }
                     PyValue::String(ref k) if k == "fortran_order" => {
                         if let PyValue::Boolean(b) = value {
-                            fortran_order = Some(b);
+                            is_fortran = Some(b);
                         } else {
                             return Err(ParseHeaderError::IllegalValue {
                                 key: "fortran_order".to_owned(),
@@ -370,12 +386,19 @@ impl Header {
                     k => return Err(ParseHeaderError::UnknownKey(k)),
                 }
             }
-            match (type_descriptor, fortran_order, shape) {
-                (Some(type_descriptor), Some(fortran_order), Some(shape)) => Ok(Header {
-                    type_descriptor,
-                    fortran_order,
-                    shape,
-                }),
+            match (type_descriptor, is_fortran, shape) {
+                (Some(type_descriptor), Some(is_fortran), Some(shape)) => {
+                    let layout = if is_fortran {
+                        Layout::Fortran
+                    } else {
+                        Layout::Standard
+                    };
+                    Ok(Header {
+                        type_descriptor,
+                        layout,
+                        shape,
+                    })
+                }
                 (None, _, _) => Err(ParseHeaderError::MissingKey("descr".to_owned())),
                 (_, None, _) => Err(ParseHeaderError::MissingKey("fortran_order".to_owned())),
                 (_, _, None) => Err(ParseHeaderError::MissingKey("shaper".to_owned())),
@@ -433,7 +456,7 @@ impl Header {
             ),
             (
                 PyValue::String("fortran_order".into()),
-                PyValue::Boolean(self.fortran_order),
+                PyValue::Boolean(self.layout.is_fortran()),
             ),
             (
                 PyValue::String("shape".into()),
