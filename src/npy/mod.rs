@@ -60,7 +60,7 @@ where
 pub fn write_npy<P, T>(path: P, array: &T) -> Result<(), WriteNpyError>
 where
     P: AsRef<std::path::Path>,
-    T: WriteNpyExt,
+    T: WriteNpyExt + ?Sized,
 {
     array.write_npy(BufWriter::new(File::create(path)?))
 }
@@ -323,10 +323,9 @@ pub trait WriteNpyExt {
     fn write_npy<W: io::Write>(&self, writer: W) -> Result<(), WriteNpyError>;
 }
 
-impl<A, S, D> WriteNpyExt for ArrayBase<S, D>
+impl<A, D> WriteNpyExt for ArrayRef<A, D>
 where
     A: WritableElement,
-    S: Data<Elem = A>,
     D: Dimension,
 {
     fn write_npy<W: io::Write>(&self, mut writer: W) -> Result<(), WriteNpyError> {
@@ -358,6 +357,18 @@ where
             writer.flush()?;
             Ok(())
         }
+    }
+}
+
+impl<A, S, D> WriteNpyExt for ArrayBase<S, D>
+where
+    A: WritableElement,
+    S: Data<Elem = A>,
+    D: Dimension,
+{
+    fn write_npy<W: io::Write>(&self, writer: W) -> Result<(), WriteNpyError> {
+        let arr: &ArrayRef<A, D> = self;
+        arr.write_npy(writer)
     }
 }
 
