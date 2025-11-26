@@ -2,7 +2,7 @@ mod elements;
 pub mod header;
 
 use self::header::{
-    FormatHeaderError, Header, ParseHeaderError, ReadHeaderError, WriteHeaderError,
+    FormatHeaderError, Header, Layout, ParseHeaderError, ReadHeaderError, WriteHeaderError,
 };
 use ndarray::prelude::*;
 use ndarray::{Data, DataOwned, IntoDimension};
@@ -170,7 +170,7 @@ where
         .expect("overflow converting length of data to u64");
     Header {
         type_descriptor: A::type_descriptor(),
-        fortran_order: false,
+        layout: Layout::Standard,
         shape: dim.as_array_view().to_vec(),
     }
     .write(file)?;
@@ -329,10 +329,10 @@ where
     D: Dimension,
 {
     fn write_npy<W: io::Write>(&self, mut writer: W) -> Result<(), WriteNpyError> {
-        let write_contiguous = |mut writer: W, fortran_order: bool| {
+        let write_contiguous = |mut writer: W, layout: Layout| {
             Header {
                 type_descriptor: A::type_descriptor(),
-                fortran_order,
+                layout,
                 shape: self.shape().to_owned(),
             }
             .write(&mut writer)?;
@@ -341,13 +341,13 @@ where
             Ok(())
         };
         if self.is_standard_layout() {
-            write_contiguous(writer, false)
+            write_contiguous(writer, Layout::Standard)
         } else if self.view().reversed_axes().is_standard_layout() {
-            write_contiguous(writer, true)
+            write_contiguous(writer, Layout::Fortran)
         } else {
             Header {
                 type_descriptor: A::type_descriptor(),
-                fortran_order: false,
+                layout: Layout::Standard,
                 shape: self.shape().to_owned(),
             }
             .write(&mut writer)?;
@@ -577,7 +577,7 @@ where
         let ndim = shape.ndim();
         let len = shape_length_checked::<A>(&shape).ok_or(ReadNpyError::LengthOverflow)?;
         let data = A::read_to_end_exact_vec(&mut reader, &header.type_descriptor, len)?;
-        ArrayBase::from_shape_vec(shape.set_f(header.fortran_order), data)
+        ArrayBase::from_shape_vec(shape.set_f(header.layout.is_fortran()), data)
             .unwrap()
             .into_dimensionality()
             .map_err(|_| ReadNpyError::WrongNdim(D::NDIM, ndim))
@@ -821,7 +821,7 @@ where
         let ndim = shape.ndim();
         let len = shape_length_checked::<A>(&shape).ok_or(ViewNpyError::LengthOverflow)?;
         let data = A::bytes_as_slice(reader, &header.type_descriptor, len)?;
-        ArrayView::from_shape(shape.set_f(header.fortran_order), data)
+        ArrayView::from_shape(shape.set_f(header.layout.is_fortran()), data)
             .unwrap()
             .into_dimensionality()
             .map_err(|_| ViewNpyError::WrongNdim(D::NDIM, ndim))
@@ -841,7 +841,7 @@ where
         let len = shape_length_checked::<A>(&shape).ok_or(ViewNpyError::LengthOverflow)?;
         let mid = buf.len() - reader.len();
         let data = A::bytes_as_mut_slice(&mut buf[mid..], &header.type_descriptor, len)?;
-        ArrayViewMut::from_shape(shape.set_f(header.fortran_order), data)
+        ArrayViewMut::from_shape(shape.set_f(header.layout.is_fortran()), data)
             .unwrap()
             .into_dimensionality()
             .map_err(|_| ViewNpyError::WrongNdim(D::NDIM, ndim))
