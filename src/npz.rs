@@ -5,7 +5,7 @@ use std::error::Error;
 use std::fmt;
 use std::io::{BufWriter, Read, Seek, Write};
 use zip::result::ZipError;
-use zip::write::SimpleFileOptions;
+use zip::write::{FileOptionExtension, FileOptions, SimpleFileOptions};
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 /// An error writing a `.npz` file.
@@ -90,7 +90,11 @@ impl<W: Write + Seek> NpzWriter<W> {
         }
     }
 
-    /// Creates a new `.npz` file with compression. See [`numpy.savez_compressed`].
+    /// Creates a new `.npz` file with [`Deflated`](CompressionMethod::Deflated) compression. See
+    /// [`numpy.savez_compressed`].
+    ///
+    /// For other compression algorithms, use [`NpzWriter::new_with_options`] or
+    /// [`NpzWriter::add_array_with_options`].
     ///
     /// [`numpy.savez_compressed`]: https://docs.scipy.org/doc/numpy/reference/generated/numpy.savez_compressed.html
     #[cfg(feature = "compressed_npz")]
@@ -101,7 +105,7 @@ impl<W: Write + Seek> NpzWriter<W> {
         }
     }
 
-    /// Creates a new `.npz` file with the specified options.
+    /// Creates a new `.npz` file with the specified options to be used for each array.
     ///
     /// This allows you to use a custom compression method, such as zstd, or set other options.
     ///
@@ -115,6 +119,8 @@ impl<W: Write + Seek> NpzWriter<W> {
 
     /// Adds an array with the specified `name` to the `.npz` file.
     ///
+    /// This uses the file options passed to the `NpzWriter` constructor.
+    ///
     /// Note that a `.npy` extension will be appended to `name`; this matches NumPy's behavior.
     ///
     /// To write a scalar value, create a zero-dimensional array using [`arr0`](ndarray::arr0) or
@@ -124,23 +130,51 @@ impl<W: Write + Seek> NpzWriter<W> {
         N: Into<String>,
         T: WriteNpyExt + ?Sized,
     {
-        fn inner<W, T>(npz: &mut NpzWriter<W>, name: String, array: &T) -> Result<(), WriteNpzError>
+        self.add_array_with_options(name, array, self.options)
+    }
+
+    /// Adds an array with the specified `name` and options to the `.npz` file.
+    ///
+    /// The specified options override those passed to the [`NpzWriter`] constructor (if any).
+    ///
+    /// Note that a `.npy` extension will be appended to `name`; this matches NumPy's behavior.
+    ///
+    /// To write a scalar value, create a zero-dimensional array using [`arr0`](ndarray::arr0) or
+    /// [`aview0`](ndarray::aview0).
+    pub fn add_array_with_options<N, T, U>(
+        &mut self,
+        name: N,
+        array: &T,
+        options: FileOptions<'_, U>,
+    ) -> Result<(), WriteNpzError>
+    where
+        N: Into<String>,
+        T: WriteNpyExt + ?Sized,
+        U: FileOptionExtension,
+    {
+        fn inner<W, T, U>(
+            npz_zip: &mut ZipWriter<W>,
+            name: String,
+            array: &T,
+            options: FileOptions<'_, U>,
+        ) -> Result<(), WriteNpzError>
         where
             W: Write + Seek,
             T: WriteNpyExt + ?Sized,
+            U: FileOptionExtension,
         {
-            npz.zip.start_file(name + ".npy", npz.options)?;
+            npz_zip.start_file(name + ".npy", options)?;
             // Buffering when writing individual arrays is beneficial even when the
             // underlying writer is `Cursor<Vec<u8>>` instead of a real file. The
             // only exception I saw in testing was the "compressed, in-memory
             // writer, standard layout case". See
             // https://github.com/jturner314/ndarray-npy/issues/50#issuecomment-812802481
             // for details.
-            array.write_npy(BufWriter::new(&mut npz.zip))?;
+            array.write_npy(BufWriter::new(npz_zip))?;
             Ok(())
         }
 
-        inner(self, name.into(), array)
+        inner(&mut self.zip, name.into(), array, options)
     }
 
     /// Calls [`.finish()`](ZipWriter::finish) on the zip file and
