@@ -1,8 +1,6 @@
-use crate::{
-    ReadNpyError, ReadNpyExt, ReadableElement, WritableElement, WriteNpyError, WriteNpyExt,
-};
+use crate::{ReadNpyError, ReadNpyExt, ReadableElement, WriteNpyError, WriteNpyExt};
 use ndarray::prelude::*;
-use ndarray::{Data, DataOwned};
+use ndarray::DataOwned;
 use std::error::Error;
 use std::fmt;
 use std::io::{BufWriter, Read, Seek, Write};
@@ -121,26 +119,28 @@ impl<W: Write + Seek> NpzWriter<W> {
     ///
     /// To write a scalar value, create a zero-dimensional array using [`arr0`](ndarray::arr0) or
     /// [`aview0`](ndarray::aview0).
-    pub fn add_array<N, S, D>(
-        &mut self,
-        name: N,
-        array: &ArrayBase<S, D>,
-    ) -> Result<(), WriteNpzError>
+    pub fn add_array<N, T>(&mut self, name: N, array: &T) -> Result<(), WriteNpzError>
     where
         N: Into<String>,
-        S::Elem: WritableElement,
-        S: Data,
-        D: Dimension,
+        T: WriteNpyExt + ?Sized,
     {
-        self.zip.start_file(name.into() + ".npy", self.options)?;
-        // Buffering when writing individual arrays is beneficial even when the
-        // underlying writer is `Cursor<Vec<u8>>` instead of a real file. The
-        // only exception I saw in testing was the "compressed, in-memory
-        // writer, standard layout case". See
-        // https://github.com/jturner314/ndarray-npy/issues/50#issuecomment-812802481
-        // for details.
-        array.write_npy(BufWriter::new(&mut self.zip))?;
-        Ok(())
+        fn inner<W, T>(npz: &mut NpzWriter<W>, name: String, array: &T) -> Result<(), WriteNpzError>
+        where
+            W: Write + Seek,
+            T: WriteNpyExt + ?Sized,
+        {
+            npz.zip.start_file(name + ".npy", npz.options)?;
+            // Buffering when writing individual arrays is beneficial even when the
+            // underlying writer is `Cursor<Vec<u8>>` instead of a real file. The
+            // only exception I saw in testing was the "compressed, in-memory
+            // writer, standard layout case". See
+            // https://github.com/jturner314/ndarray-npy/issues/50#issuecomment-812802481
+            // for details.
+            array.write_npy(BufWriter::new(&mut npz.zip))?;
+            Ok(())
+        }
+
+        inner(self, name.into(), array)
     }
 
     /// Calls [`.finish()`](ZipWriter::finish) on the zip file and
