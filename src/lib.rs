@@ -18,7 +18,7 @@
 //!   - [`read_npy`] convenience function
 //! - Writing
 //!   - [`WriteNpyExt`] extension trait
-//!   - [`write_npy`] convenience function
+//!   - [`write_npy`] and [`create_new_npy`] convenience functions
 //!   - [`write_zeroed_npy`] to write an `.npy` file (sparse if possible) of zeroed data
 //! - Readonly viewing (primarily for use with memory-mapped files)
 //!   - [`ViewNpyExt`] extension trait
@@ -55,7 +55,7 @@ mod npy;
 mod npz;
 
 pub use crate::npy::{
-    read_npy, write_npy, write_zeroed_npy, ReadDataError, ReadNpyError, ReadNpyExt,
+    create_new_npy, read_npy, write_npy, write_zeroed_npy, ReadDataError, ReadNpyError, ReadNpyExt,
     ReadableElement, ViewDataError, ViewElement, ViewMutElement, ViewMutNpyExt, ViewNpyError,
     ViewNpyExt, WritableElement, WriteDataError, WriteNpyError, WriteNpyExt,
 };
