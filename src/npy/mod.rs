@@ -35,7 +35,7 @@ where
     P: AsRef<std::path::Path>,
     T: ReadNpyExt,
 {
-    T::read_npy(std::fs::File::open(path)?)
+    T::read_npy(File::open(path)?)
 }
 
 /// Writes an array to an `.npy` file at the specified path.
