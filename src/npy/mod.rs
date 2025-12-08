@@ -65,6 +65,31 @@ where
     array.write_npy(BufWriter::new(File::create(path)?))
 }
 
+/// Writes an array to a new `.npy` file at the specified path; error if the file exists.
+///
+/// This is a convenience function for `BufWriter::new(File::create_new(path)?)` followed by
+/// [`WriteNpyExt::write_npy`].
+///
+/// # Example
+///
+/// ```no_run
+/// use ndarray::array;
+/// use ndarray_npy::create_new_npy;
+/// # use ndarray_npy::WriteNpyError;
+///
+/// let arr = array![[1, 2, 3], [4, 5, 6]];
+/// create_new_npy("new_array.npy", &arr)?;
+/// assert!(create_new_npy("new_array.npy", &arr).is_err());
+/// # Ok::<_, WriteNpyError>(())
+/// ```
+pub fn create_new_npy<P, T>(path: P, array: &T) -> Result<(), WriteNpyError>
+where
+    P: AsRef<std::path::Path>,
+    T: WriteNpyExt + ?Sized,
+{
+    array.write_npy(BufWriter::new(File::create_new(path)?))
+}
+
 /// Writes an `.npy` file (sparse if possible) with bitwise-zero-filled data.
 ///
 /// The `.npy` file represents an array with element type `A` and shape
