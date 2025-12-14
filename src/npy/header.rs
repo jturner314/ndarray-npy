@@ -109,9 +109,12 @@ impl From<PyValueParseError> for ParseHeaderError {
     }
 }
 
+/// Error reading an `.npy` header.
 #[derive(Debug)]
 pub enum ReadHeaderError {
+    /// I/O error.
     Io(io::Error),
+    /// Error parsing the header.
     Parse(ParseHeaderError),
 }
 
@@ -297,9 +300,12 @@ impl From<PyValueFormatError> for FormatHeaderError {
     }
 }
 
+/// Error writing an `.npy` header.
 #[derive(Debug)]
 pub enum WriteHeaderError {
+    /// I/O error.
     Io(io::Error),
+    /// Error formatting the header.
     Format(FormatHeaderError),
 }
 
