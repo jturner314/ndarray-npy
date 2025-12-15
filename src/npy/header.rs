@@ -1,3 +1,8 @@
+//! Types and methods for (de)serializing the header of an `.npy` file.
+//!
+//! In most cases, users do not need this module, since they can use the more convenient,
+//! higher-level functionality instead.
+
 use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
 use num_traits::ToPrimitive;
 use py_literal::{
@@ -17,30 +22,40 @@ const MAGIC_STRING: &[u8] = b"\x93NUMPY";
 // If this changes, update the docs of `ViewNpyExt` and `ViewMutNpyExt`.
 const HEADER_DIVISOR: usize = 64;
 
+/// Error parsing an `.npy` header.
 #[derive(Debug)]
 pub enum ParseHeaderError {
+    /// The first several bytes are not the expected magic string.
     MagicString,
-    Version {
-        major: u8,
-        minor: u8,
-    },
-    /// Indicates that the `HEADER_LEN` doesn't fit in `usize`.
+    /// The version number specified in the header is unsupported.
+    Version { major: u8, minor: u8 },
+    /// The `HEADER_LEN` doesn't fit in `usize`.
     HeaderLengthOverflow(u32),
-    /// Indicates that the array format string contains non-ASCII characters.
+    /// The array format string contains non-ASCII characters.
+    ///
     /// This is an error for .npy format versions 1.0 and 2.0.
     NonAscii,
-    /// Error parsing the array format string as UTF-8. This does not apply to
-    /// .npy format versions 1.0 and 2.0, which require the array format string
-    /// to be ASCII.
+    /// Error parsing the array format string as UTF-8.
+    ///
+    /// This does not apply to .npy format versions 1.0 and 2.0, which require the array format
+    /// string to be ASCII.
     Utf8Parse(std::str::Utf8Error),
+    /// The Python dictionary in the header contains an unexpected key.
     UnknownKey(PyValue),
+    /// The Python dictionary in the header is missing an expected key.
     MissingKey(String),
+    /// The value corresponding to an expected key is illegal (e.g., the wrong type).
     IllegalValue {
+        /// The key in the header dictionary.
         key: String,
+        /// The corresponding (illegal) value.
         value: PyValue,
     },
+    /// Error parsing the dictionary in the header.
     DictParse(PyValueParseError),
+    /// The metadata in the header is not a dictionary.
     MetaNotDict(PyValue),
+    /// There is no newline at the end of the header.
     MissingNewline,
 }
 
@@ -94,9 +109,12 @@ impl From<PyValueParseError> for ParseHeaderError {
     }
 }
 
+/// Error reading an `.npy` header.
 #[derive(Debug)]
 pub enum ReadHeaderError {
+    /// I/O error.
     Io(io::Error),
+    /// Error parsing the header.
     Parse(ParseHeaderError),
 }
 
@@ -248,8 +266,10 @@ struct HeaderLengthInfo {
     formatted_header_len: Vec<u8>,
 }
 
+/// Error formatting an `.npy` header.
 #[derive(Debug)]
 pub enum FormatHeaderError {
+    /// Error formatting the header's metadata dictionary.
     PyValue(PyValueFormatError),
     /// The total header length overflows `usize`, or `HEADER_LEN` exceeds the
     /// maximum encodable value.
@@ -280,9 +300,12 @@ impl From<PyValueFormatError> for FormatHeaderError {
     }
 }
 
+/// Error writing an `.npy` header.
 #[derive(Debug)]
 pub enum WriteHeaderError {
+    /// I/O error.
     Io(io::Error),
+    /// Error formatting the header.
     Format(FormatHeaderError),
 }
 
@@ -316,6 +339,7 @@ impl From<FormatHeaderError> for WriteHeaderError {
     }
 }
 
+/// Layout of an array stored in an `.npy` file.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Layout {
     /// Standard layout (C order).
@@ -332,10 +356,15 @@ impl Layout {
     }
 }
 
+/// Header of an `.npy` file.
 #[derive(Clone, Debug)]
 pub struct Header {
+    /// A Python literal which can be passed as an argument to the `numpy.dtype` constructor to
+    /// create the array's dtype.
     pub type_descriptor: PyValue,
+    /// The layout of the array.
     pub layout: Layout,
+    /// The shape of the array.
     pub shape: Vec<usize>,
 }
 
@@ -408,6 +437,7 @@ impl Header {
         }
     }
 
+    /// Deserializes a header from the provided reader.
     pub fn from_reader<R: io::Read>(reader: &mut R) -> Result<Self, ReadHeaderError> {
         // Check for magic string.
         let mut buf = vec![0; MAGIC_STRING.len()];
@@ -470,6 +500,7 @@ impl Header {
         ])
     }
 
+    /// Returns the serialized representation of the header.
     pub fn to_bytes(&self) -> Result<Vec<u8>, FormatHeaderError> {
         // Metadata describing array's format as ASCII string.
         let mut arr_format = Vec::new();
@@ -499,6 +530,7 @@ impl Header {
         Ok(out)
     }
 
+    /// Writes the serialized representation of the header to the provided writer.
     pub fn write<W: io::Write>(&self, mut writer: W) -> Result<(), WriteHeaderError> {
         let bytes = self.to_bytes()?;
         writer.write_all(&bytes)?;

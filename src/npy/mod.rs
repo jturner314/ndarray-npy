@@ -1,3 +1,7 @@
+//! Functionality for `.npy` files.
+//!
+//! Most of this functionality is reexported at the top level of the crate.
+
 mod elements;
 pub mod header;
 
