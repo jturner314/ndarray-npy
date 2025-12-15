@@ -1,3 +1,30 @@
+# 0.10.0
+
+## Breaking Changes
+
+* Updated to `ndarray` 0.17.1.
+* Updated to `zip` 6.
+* Updated minimum Rust version to 1.84.
+* Changed the `array` parameter of `NpzWriter::add_array` from
+  `&ArrayBase<S, D>` to `T: WriteNpyExt + ?Sized` to support the new
+  `ArrayRef` type in `ndarray` 0.17.1.
+
+## New Features
+
+* Added new `create_new_npy` convenience function which uses
+  `File::create_new`. (In contrast, the existing `write_npy` function
+  uses `File::create`.)
+* Added `NpzWriter::add_array_with_options`, which overrides the
+  options for that specific array.
+* Publicly exposed the `npy` module to provide access to
+  header-related functionality in the `npy::header` module. In most
+  cases, users do not need this functionality, but some users have
+  requested access to it for specific use cases.
+* Implemented `WriteNpyExt` for the new `ArrayRef` type in `ndarray`
+  0.17.1.
+* Removed the implicit `Sized` bound from `write_npy` to support the
+  new `ArrayRef` type in `ndarray` 0.17.1.
+
 # 0.9.1
 
 * Removed broken links from docs.
