@@ -61,3 +61,4 @@ pub use crate::npy::{
 };
 #[cfg(feature = "npz")]
 pub use crate::npz::{NpzReader, NpzWriter, ReadNpzError, WriteNpzError};
+pub use py_literal;
