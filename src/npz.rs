@@ -145,7 +145,7 @@ impl<W: Write + Seek> NpzWriter<W> {
         &mut self,
         name: N,
         array: &T,
-        options: FileOptions<'_, U>,
+        options: FileOptions<'_, '_, U>,
     ) -> Result<(), WriteNpzError>
     where
         N: Into<String>,
@@ -156,7 +156,7 @@ impl<W: Write + Seek> NpzWriter<W> {
             npz_zip: &mut ZipWriter<W>,
             name: String,
             array: &T,
-            options: FileOptions<'_, U>,
+            options: FileOptions<'_, '_, U>,
         ) -> Result<(), WriteNpzError>
         where
             W: Write + Seek,
@@ -276,8 +276,8 @@ impl<R: Read + Seek> NpzReader<R> {
         Ok((0..self.zip.len())
             .map(|i| {
                 let file = self.zip.by_index(i)?;
-                let name = file.name();
-                let stripped = name.strip_suffix(".npy").unwrap_or(name);
+                let name = file.name()?;
+                let stripped = name.strip_suffix(".npy").unwrap_or(&name);
                 Ok(stripped.to_owned())
             })
             .collect::<Result<_, ZipError>>()?)

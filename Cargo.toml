@@ -1,6 +1,6 @@
 [package]
 name = "ndarray-npy"
-version = "0.10.0"
+version = "0.11.0"
 authors = ["Jim Turner <ndarray-npy@turner.link>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/jturner314/ndarray-npy"
@@ -10,7 +10,7 @@ keywords = ["npy", "npz", "ndarray", "numpy", "array"]
 categories = ["parser-implementations", "encoding", "science"]
 readme = "README.md"
 edition = "2021"
-rust-version = "1.84"
+rust-version = "1.88"
 
 [dependencies]
 byteorder = "1.3.2"
@@ -18,7 +18,7 @@ ndarray = "0.17.1"
 num-complex-0_4 = { package = "num-complex", version = "0.4", optional = true }
 num-traits = "0.2"
 py_literal = "0.4"
-zip = { version = "6", default-features = false, optional = true }
+zip = { version = "9", default-features = false, optional = true }
 
 [features]
 default = ["compressed_npz", "num-complex-0_4"]

@@ -1,3 +1,13 @@
+# 0.11.0
+
+## Breaking Changes
+
+* Updated to `zip` 9. This addresses three security advisories:
+  - https://rustsec.org/advisories/RUSTSEC-2026-0367.html
+  - https://rustsec.org/advisories/RUSTSEC-2026-0368.html
+  - https://rustsec.org/advisories/RUSTSEC-2026-0369.html
+* Updated minimum Rust version to 1.88.
+
 # 0.10.0
 
 ## Breaking Changes
