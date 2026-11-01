@@ -1,3 +1,16 @@
+# 0.11.0 (not yet released)
+
+## Breaking Changes
+
+* Updated `zip` dependency to version 9. This addresses three security
+  advisories in that crate, listed below. Note that the vulnerable methods in
+  the `zip` API referenced by these advisories are not called directly by
+  `ndarray-npy`.
+  - https://rustsec.org/advisories/RUSTSEC-2026-0367.html
+  - https://rustsec.org/advisories/RUSTSEC-2026-0368.html
+  - https://rustsec.org/advisories/RUSTSEC-2026-0369.html
+* Updated minimum Rust version to 1.88.
+
 # 0.10.0
 
 ## Breaking Changes
