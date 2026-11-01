@@ -37,7 +37,7 @@ fn check_bytes_len<T>(bytes_len: usize, len: usize) -> Result<(), ViewDataError>
 /// Returns `Ok(_)` iff the slice of bytes is properly aligned to be cast to a
 /// slice with element type `T`.
 fn check_bytes_align<T>(bytes: &[u8]) -> Result<(), ViewDataError> {
-    if bytes.as_ptr() as usize % mem::align_of::<T>() == 0 {
+    if (bytes.as_ptr() as usize).is_multiple_of(mem::align_of::<T>()) {
         Ok(())
     } else {
         Err(ViewDataError::Misaligned)
