@@ -1,6 +1,6 @@
 //! Trait implementations for `bool`.
 
-use super::{bytes_as_mut_slice, bytes_as_slice, check_for_extra_bytes};
+use super::{bytes_as_mut_slice, bytes_as_slice, check_for_extra_bytes, zeroed_vec_of_len};
 use crate::{ReadDataError, ReadableElement, ViewDataError, ViewElement, ViewMutElement};
 use py_literal::Value as PyValue;
 use std::error::Error;
@@ -63,7 +63,11 @@ impl ReadableElement for bool {
         match *type_desc {
             PyValue::String(ref s) if s == "|b1" => {
                 // Read the data.
-                let mut bytes: Vec<u8> = vec![0; len];
+                //
+                // `len` comes from the file and is untrusted; see the docs of
+                // `zeroed_vec_of_len` for why we don't build the `Vec` in the
+                // usual way.
+                let mut bytes: Vec<u8> = zeroed_vec_of_len(len, 0u8)?;
                 reader.read_exact(&mut bytes)?;
                 check_for_extra_bytes(&mut reader)?;
 

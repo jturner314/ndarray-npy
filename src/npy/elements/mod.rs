@@ -18,6 +18,26 @@ fn check_for_extra_bytes<R: io::Read>(reader: &mut R) -> Result<(), ReadDataErro
     }
 }
 
+/// Creates a `Vec<T>` of exactly `len` elements, all initialized to `zero`.
+///
+/// The `len` argument comes from the array shape declared in the `.npy` file
+/// header, so it is untrusted: a file of a hundred bytes can declare a shape
+/// implying terabytes of data (CWE-770).
+///
+/// The capacity is reserved with `try_reserve_exact` rather than by
+/// constructing the `Vec` directly, so that an allocation which cannot be
+/// satisfied (or whose size in bytes overflows `usize`) turns into an I/O
+/// error with `ErrorKind::OutOfMemory` for the caller to handle, instead of
+/// aborting the whole process.
+fn zeroed_vec_of_len<T: Clone>(len: usize, zero: T) -> Result<Vec<T>, io::Error> {
+    let mut v: Vec<T> = Vec::new();
+    v.try_reserve_exact(len).map_err(io::Error::from)?;
+    // The reservation above guarantees enough capacity, so this cannot
+    // allocate (and therefore cannot abort).
+    v.resize(len, zero);
+    Ok(v)
+}
+
 /// Returns `Ok(_)` iff a slice containing `bytes_len` bytes is the correct length to cast to
 /// a slice with element type `T` and length `len`.
 ///

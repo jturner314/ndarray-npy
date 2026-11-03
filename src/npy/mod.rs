@@ -34,6 +34,12 @@ use std::mem;
 /// # println!("arr = {}", arr);
 /// # Ok::<_, ReadNpyError>(())
 /// ```
+///
+/// # Panics
+///
+/// See the `# Panics` section of
+/// [`ReadNpyExt::read_npy`](trait.ReadNpyExt.html#tymethod.read_npy); reading
+/// an untrusted file may still abort the process in some situations.
 pub fn read_npy<P, T>(path: P) -> Result<T, ReadNpyError>
 where
     P: AsRef<std::path::Path>,
@@ -591,6 +597,28 @@ pub trait ReadNpyExt: Sized {
     /// This function is the Rust equivalent of
     /// [`numpy.load`](https://docs.scipy.org/doc/numpy/reference/generated/numpy.load.html)
     /// for `.npy` files.
+    ///
+    /// # Panics
+    ///
+    /// This crate aims to avoid *undefined behavior* and *incorrect output*
+    /// regardless of the input, but it is not hardened against maliciously
+    /// crafted files, and reading untrusted input can still abort the process
+    /// in the following situations:
+    ///
+    /// * Memory for the array is reserved based on the shape declared in the
+    ///   file header, before the data itself is read. The reservation uses
+    ///   [`Vec::try_reserve_exact`], so an allocation the system cannot satisfy
+    ///   is reported as an error rather than aborting, but the reservation is
+    ///   still attempted. A small file declaring a very large shape may
+    ///   therefore briefly request a very large amount of memory.
+    ///
+    /// * Parsing the header dictionary involves recursion, so a header
+    ///   containing deeply nested Python literals can overflow the stack and
+    ///   abort. This happens before any allocation size is checked.
+    ///
+    /// Callers reading untrusted files should impose their own limits (for
+    /// example by reading from a `Read` that refuses to yield more than a fixed
+    /// number of bytes) or run untrusted reads in a subprocess.
     fn read_npy<R: io::Read>(reader: R) -> Result<Self, ReadNpyError>;
 }
 
