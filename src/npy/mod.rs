@@ -4,6 +4,7 @@
 
 mod elements;
 pub mod header;
+pub use elements::RecordFromSlice;
 
 use self::header::{
     FormatHeaderError, Header, Layout, ParseHeaderError, ReadHeaderError, WriteHeaderError,

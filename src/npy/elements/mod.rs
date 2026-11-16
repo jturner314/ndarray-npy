@@ -200,3 +200,5 @@ mod bool;
 #[cfg(feature = "num-complex-0_4")]
 mod complex;
 mod num;
+mod record;
+pub use record::RecordFromSlice;
