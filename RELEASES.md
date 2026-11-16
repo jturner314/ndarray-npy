@@ -1,4 +1,4 @@
-# 0.11.0 (not yet released)
+# 0.11.0
 
 ## Breaking Changes
 
