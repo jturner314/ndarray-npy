@@ -34,6 +34,13 @@
 //! - Reading: [`NpzReader`]
 //! - Writing: [`NpzWriter`]
 //!
+//! # Inspecting `.npy` headers
+//!
+//! To inspect an `.npy` file's dtype, layout, and shape without reading the
+//! array data, use the [`npy::header`] module. In particular,
+//! [`Header::from_reader`](npy::header::Header::from_reader) reads only the
+//! header from a reader positioned at the start of the file.
+//!
 //! # Limitations
 //!
 //! * Parsing of `.npy` files is currently limited to files where the `descr`
