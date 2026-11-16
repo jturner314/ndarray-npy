@@ -1,6 +1,6 @@
 //! Trait implementations for primitive numeric types.
 
-use super::{bytes_as_mut_slice, bytes_as_slice, check_for_extra_bytes};
+use super::{bytes_as_mut_slice, bytes_as_slice, check_for_extra_bytes, zeroed_vec_of_len};
 use crate::{ReadDataError, ReadableElement, ViewDataError, ViewElement, ViewMutElement};
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 use py_literal::Value as PyValue;
@@ -16,7 +16,10 @@ macro_rules! impl_readable_primitive_one_byte {
             ) -> Result<Vec<Self>, ReadDataError> {
                 match *type_desc {
                     PyValue::String(ref s) if $(s == $desc)||* => {
-                        let mut out = vec![$zero; len];
+                        // `len` comes from the file and is untrusted; see the
+                        // docs of `zeroed_vec_of_len` for why we don't build
+                        // the `Vec` in the usual way.
+                        let mut out = zeroed_vec_of_len(len, $zero)?;
                         reader.$read_into(&mut out)?;
                         check_for_extra_bytes(&mut reader)?;
                         Ok(out)
@@ -81,7 +84,10 @@ macro_rules! impl_readable_primitive_multi_byte {
                 type_desc: &PyValue,
                 len: usize,
             ) -> Result<Vec<Self>, ReadDataError> {
-                let mut out = vec![$zero; len];
+                // `len` comes from the file and is untrusted; see the docs of
+                // `zeroed_vec_of_len` for why we don't build the `Vec` in the
+                // usual way.
+                let mut out = zeroed_vec_of_len(len, $zero)?;
                 match *type_desc {
                     PyValue::String(ref s) if s == $little_desc => {
                         reader.$read_into::<LittleEndian>(&mut out)?;

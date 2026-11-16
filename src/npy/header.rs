@@ -455,8 +455,25 @@ impl Header {
         let header_len = version.read_header_len(reader)?;
 
         // Parse the dictionary describing the array's format.
-        let mut buf = vec![0; header_len];
-        reader.read_exact(&mut buf)?;
+        //
+        // Note: `header_len` is read from the file and is therefore untrusted.
+        // Allocating `header_len` bytes up front would allow a very small file
+        // to trigger a huge allocation (up to 4 GiB for versions 2.0 and 3.0),
+        // i.e. CWE-770. Instead, read at most `header_len` bytes and let the
+        // buffer grow to however much data is actually available, so the
+        // allocation is bounded by the real size of the input.
+        let mut buf = Vec::new();
+        let mut limited = io::Read::take(reader, header_len as u64);
+        let read = io::Read::read_to_end(&mut limited, &mut buf)?;
+        if read != header_len {
+            // Matches the error `read_exact` would have produced, so the
+            // observable behavior for truncated files is unchanged.
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "failed to fill whole buffer",
+            )
+            .into());
+        }
         let without_newline = match buf.split_last() {
             Some((&b'\n', rest)) => rest,
             Some(_) | None => return Err(ParseHeaderError::MissingNewline.into()),
